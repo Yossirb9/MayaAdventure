@@ -57,7 +57,7 @@ namespace MayaAdventure.EditorTools
         /// <summary>Every shader the game looks up by name at runtime (Shader.Find only sees shaders that are in the build).</summary>
         public static readonly string[] RuntimeShaders =
         {
-            "Universal Render Pipeline/Lit", "Maya/Particle", "Maya/Water", "Maya/Sky",
+            "Universal Render Pipeline/Lit", "Maya/Particle", "Maya/Water", "Maya/Sky", "Maya/Character",
             "TextMeshPro/Mobile/Distance Field", "TextMeshPro/Distance Field",
         };
 

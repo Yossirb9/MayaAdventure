@@ -19,6 +19,7 @@
 
 # Builds and local build scratch (the APK is attached to GitHub releases instead)
 /[Bb]uilds/
+/Trailer/
 /build/
 /.utmp/
 *.apk

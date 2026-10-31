@@ -170,7 +170,7 @@ namespace MayaAdventure
             gm.Hud.Fade(1f, 0.35f);
             yield return new WaitForSeconds(0.45f);
             var exit = partner.transform.position + Vector3.up * (partner.topY + 0.05f);
-            p.Teleport(exit, p.transform.eulerAngles.y);
+            p.Teleport(exit, p.transform.eulerAngles.y, false);
             gm.Cam.Snap();
             gm.Hud.Fade(0f, 0.35f);
             yield return new WaitForSeconds(0.2f);
@@ -233,7 +233,7 @@ namespace MayaAdventure
             var gm = GameManager.I;
             gm.Sfx.Play(gm.Sfx.Warp, 0.6f);
             p.SetHidden(true);
-            p.Teleport(transform.position + Vector3.up * 0.5f, transform.eulerAngles.y);
+            p.Teleport(transform.position + Vector3.up * 0.5f, transform.eulerAngles.y, false);
             gm.Hud.Show("3... 2... 1...", 1.1f);
             for (float t = 0f; t < 1.1f; t += Time.deltaTime)
             {

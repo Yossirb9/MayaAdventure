@@ -27,6 +27,30 @@ namespace MayaAdventure
             messageUntil = Time.unscaledTime + seconds;
         }
 
+        string caption, captionSub;
+        float captionFrom, captionUntil;
+
+        /// <summary>Big trailer-style caption near the bottom (title + optional subtitle).</summary>
+        public void Caption(string text, float seconds, string sub = null)
+        {
+            caption = text;
+            captionSub = sub;
+            captionFrom = Time.unscaledTime;
+            captionUntil = Time.unscaledTime + seconds;
+        }
+
+        void DrawCaption(float w, float h)
+        {
+            if (caption == null || Time.unscaledTime > captionUntil) return;
+            float age = Time.unscaledTime - captionFrom, left = captionUntil - Time.unscaledTime;
+            float a = Mathf.Clamp01(age * 4f) * Mathf.Clamp01(left * 3f);
+            float slide = (1f - Mathf.Clamp01(age * 4f)) * 40f;
+            Fill(new Rect(0, h - 250f, w, 250f), new Color(0.02f, 0.03f, 0.1f, 0.35f * a));
+            Text(new Rect(0, h - 230f + slide, w, 120f), caption, 92, new Color(1f, 0.86f, 0.25f, a), TextAnchor.MiddleCenter, 5);
+            if (!string.IsNullOrEmpty(captionSub))
+                Text(new Rect(0, h - 120f + slide, w, 60f), captionSub, 40, new Color(1f, 1f, 1f, a), TextAnchor.MiddleCenter, 3);
+        }
+
         /// <summary>Big level-name banner.</summary>
         public void ShowTitle(string text, float seconds)
         {
@@ -406,6 +430,10 @@ namespace MayaAdventure
         }
 
         TouchControls touch;
+
+        /// <summary>Layout width in 1080-tall units: the canvas' own size (it can also render into a texture, e.g. the trailer).</summary>
+        float CanvasWidth() => layer != null && layer.rect.width > 1f ? layer.rect.width * 1080f / Mathf.Max(1f, layer.rect.height)
+                                                                       : Screen.width / (Screen.height / 1080f);
         static string firstError;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -429,13 +457,13 @@ namespace MayaAdventure
             if (gm == null) return;
             EnsureStyle();
             BeginFrame();
-            float scale = Screen.height / 1080f;
-            float w = Screen.width / scale, h = 1080f;
+            float w = CanvasWidth(), h = 1080f;
             Draw(gm, w, h);
+            DrawCaption(w, h);
             if (touch == null) touch = GetComponent<TouchControls>();
             if (touch != null) touch.DrawUi(this);
             if (fade > 0.001f) Fill(new Rect(0, 0, w, h), new Color(0.02f, 0.02f, 0.06f, fade));
-            if (firstError != null)
+            if (firstError != null && !ScriptedInput.Active)
                 Text(new Rect(20f, h - 60f, w - 40f, 50f), "Error: " + firstError, 22, new Color(1f, 0.45f, 0.45f), TextAnchor.MiddleLeft, 2);
             EndFrame();
         }
@@ -529,7 +557,8 @@ namespace MayaAdventure
             {
                 Text(new Rect(cx - 500f, 360f, 1000f, 70f), "להתחיל משחק חדש? כל הכוכבים שאספת יימחקו", 40, new Color(1f, 0.8f, 0.8f), TextAnchor.MiddleCenter, 3);
             }
-            DrawButtons();
+            // The trailer's end card shows only the logo and its caption.
+            if (!(ScriptedInput.Active && caption != null && Time.unscaledTime < captionUntil)) DrawButtons();
         }
 
         // ---------- title and pause menus ----------
@@ -662,7 +691,7 @@ namespace MayaAdventure
             if (gm.State != GameState.Title && gm.State != GameState.Paused) return;
             EnsureStyle();
             float scale = Screen.height / 1080f;
-            BuildButtons(gm, Screen.width / scale);
+            BuildButtons(gm, CanvasWidth());
             if (buttons.Count == 0) return;
 #if ENABLE_LEGACY_INPUT_MANAGER
             if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S)) selected = (selected + 1) % buttons.Count;
@@ -767,6 +796,22 @@ namespace MayaAdventure
             Text(new Rect(165f, 40f, 700f, 44f), gm.LevelName, 36, Color.white, TextAnchor.MiddleLeft, 3);
             Text(new Rect(165f, 86f, 700f, 40f), $"כוכבים בעולם הזה: {gm.LevelStars}/{gm.LevelStarTotal}", 28, new Color(1f, 0.9f, 0.5f), TextAnchor.MiddleLeft, 2);
 
+            // Boss health bar, top centre, while fighting a king.
+            var king = KingGrumble.Engaged;
+            if (king != null && !king.Dead)
+            {
+                float bw = 560f, bx = w * 0.5f - bw * 0.5f;
+                Panel(new Rect(bx, 16f, bw, 96f));
+                Text(new Rect(bx, 20f, bw, 44f), "המלך גרמבל", 34, new Color(1f, 0.75f, 0.3f), TextAnchor.MiddleCenter, 3);
+                float slot = (bw - 60f) / Mathf.Max(1, king.MaxHp);
+                for (int i = 0; i < king.MaxHp; i++)
+                {
+                    var r = new Rect(bx + 30f + i * slot + 4f, 70f, slot - 8f, 24f);
+                    Fill(r, new Color(0.1f, 0.05f, 0.1f, 0.7f));
+                    if (i < king.Hp) Fill(new Rect(r.x + 3f, r.y + 3f, r.width - 6f, r.height - 6f), new Color(0.95f, 0.25f, 0.35f));
+                }
+            }
+
             // Power-up timer under the meter.
             var player = gm.Player;
             if (player != null && player.Power != PowerKind.None)
@@ -807,7 +852,7 @@ namespace MayaAdventure
 
         void DrawHint(float w, float h)
         {
-            if (hint == null || Time.unscaledTime > hintUntil) return;
+            if (hint == null || Time.unscaledTime > hintUntil || ScriptedInput.Active) return;
             // Wrap in logical order first, then Text() turns each line right-to-left, so long hints never overflow the box.
             const float boxWidth = 1120f, lineHeight = 50f;
             var lines = Wrap(hint, 36, boxWidth - 60f);
@@ -846,7 +891,7 @@ namespace MayaAdventure
         {
             if (playStartTime < 0f) return;
             float age = Time.unscaledTime - playStartTime;
-            if (age > 14f || TouchControls.Active) return;
+            if (age > 14f || TouchControls.Active || ScriptedInput.Active) return;
             float a = Mathf.Clamp01(14f - age);
             Text(new Rect(0, h - 80, w, 50), "רווח - קפיצה   ·   Ctrl/E/קליק - מכה, באוויר: הלמות קרקע   ·   Esc - הפסקה", 30,
                  new Color(1f, 1f, 1f, a), TextAnchor.MiddleCenter, 2);

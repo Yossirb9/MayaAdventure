@@ -91,7 +91,8 @@ namespace MayaAdventure
             if (Power != PowerKind.None && Time.time > powerUntil) EndPower();
             if (Grounded && conveyor != null) cc.Move(conveyor.Velocity * dt);
 
-            Vector3 wish = CameraRelative(InputEnabled ? Controls.Move : Vector2.zero);
+            Vector3 wish = ScriptedInput.Active ? Vector3.ClampMagnitude(ScriptedInput.WorldMove, 1f)
+                         : CameraRelative(InputEnabled ? Controls.Move : Vector2.zero);
 
             // Water: below chest depth Maya swims (with the metal power-up she sinks and walks instead).
             float waterY = WaterY;
@@ -349,7 +350,7 @@ namespace MayaAdventure
         /// <summary>Fire Maya out of a cannon: no air steering until she lands.</summary>
         public void CannonLaunch(Vector3 from, Vector3 launchVelocity, float flightTime)
         {
-            Teleport(from, Quaternion.LookRotation(new Vector3(launchVelocity.x, 0f, launchVelocity.z)).eulerAngles.y);
+            Teleport(from, Quaternion.LookRotation(new Vector3(launchVelocity.x, 0f, launchVelocity.z)).eulerAngles.y, false);
             Hidden = false;
             model.SetVisible(true);
             velocity = launchVelocity;
@@ -630,7 +631,9 @@ namespace MayaAdventure
             ground = null;
         }
 
-        public void Teleport(Vector3 position, float yaw)
+        /// <param name="protect">A second of invulnerability (with blinking) - for respawns after a fall or a lost life,
+        /// not for placing her at a level start, on the title screen, out of a cannon or a pipe.</param>
+        public void Teleport(Vector3 position, float yaw, bool protect = true)
         {
             if (cc == null) cc = GetComponent<CharacterController>();
             cc.enabled = false;
@@ -645,7 +648,7 @@ namespace MayaAdventure
             Swimming = false;
             airLock = 0f;
             punchTimer = 0f;
-            invulnerableUntil = Time.time + 1f;
+            invulnerableUntil = protect ? Time.time + 1f : 0f;
         }
 
         static Vector3 CameraRelative(Vector2 input)

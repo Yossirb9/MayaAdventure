@@ -57,9 +57,16 @@ namespace MayaAdventure
             if (music != null) music.mute = !on;
         }
 
+        /// <summary>Told about every sound effect played (the trailer recorder rebuilds the soundtrack from these).</summary>
+        public static System.Action<AudioClip, float> Listener;
+
+        public AudioClip MusicClip => music != null ? music.clip : null;
+
         public void Play(AudioClip clip, float volume = 1f)
         {
-            if (clip != null) fx.PlayOneShot(clip, volume);
+            if (clip == null) return;
+            fx.PlayOneShot(clip, volume);
+            Listener?.Invoke(clip, volume);
         }
 
         public void Jump(int chain) => Play(jumps[Mathf.Clamp(chain, 0, 2)], 0.8f);

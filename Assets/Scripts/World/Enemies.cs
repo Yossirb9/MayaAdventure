@@ -653,9 +653,29 @@ namespace MayaAdventure
     /// </summary>
     public class KingGrumble : Grumble
     {
-        int hp = 3;
-        float invulnerable, dazed, waveTimer = 4f, wave = -1f;
+        int hp = 3, maxHp = 3;
+        float invulnerable, dazed, waveTimer = 2.5f, wave = -1f;
+
+        /// <summary>The king Maya is fighting right now (the HUD shows his health bar).</summary>
+        public static KingGrumble Engaged { get; private set; }
+        public int Hp => hp;
+        public int MaxHp => maxHp;
+        /// <summary>The shockwave ring's radius, or -1 when there is none.</summary>
+        public float WaveRadius => wave < 0f ? -1f : wave * 9f;
+        public Vector3 WaveCenter => waveCenter;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetEngaged() => Engaged = null;
+
+        /// <summary>Jump up and send out a shockwave now (used by the trailer).</summary>
+        public void SlamNow()
+        {
+            if (!Dead && wave < 0f && dazed <= 0f) StartCoroutine(JumpSlam());
+        }
         Transform ring;
+        Mesh ringMesh;
+        readonly Vector3[] ringVerts = new Vector3[2 * 65];
+        int[] ringTris;
         Renderer[] renderers;
         PowerStar star;
         Vector3 waveCenter;
@@ -664,14 +684,23 @@ namespace MayaAdventure
         {
             var k = Build<KingGrumble>(parent, position, 2.4f, "character-oobi");
             k.star = star;
-            k.hp = hp;
+            k.hp = k.maxHp = hp;
             k.leash = 9f;
             k.chaseRange = 14f;
             k.chaseSpeed = 2.6f;
             k.speed = 1.2f;
             k.coinsOnDeath = 5;
             k.AddCrown();
-            k.ring = Art.Prim(PrimitiveType.Cylinder, "Shockwave", parent, position, new Vector3(1f, 0.05f, 1f), Art.Glow(new Color(1f, 0.55f, 0.3f), 1.5f), Art.Col.None, null, false).transform;
+            // The shockwave is a thin glowing band that races outward (rebuilt each frame at its current radius).
+            k.ringMesh = new Mesh { name = "Shockwave" };
+            k.ringMesh.MarkDynamic();
+            var ringGo = new GameObject("Shockwave");
+            ringGo.transform.SetParent(parent, false);
+            ringGo.AddComponent<MeshFilter>().sharedMesh = k.ringMesh;
+            var mr = ringGo.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = Art.Glow(new Color(1f, 0.45f, 0.2f), 0.9f, 0.3f, 0f);
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            k.ring = ringGo.transform;
             k.ring.gameObject.SetActive(false);
             return k;
         }
@@ -712,6 +741,9 @@ namespace MayaAdventure
             if (invulnerable > 0f) return kind == HitKind.Stomp; // still bounce Maya off his head
             hp--;
             invulnerable = 1.4f;
+            // Each hit makes him angrier: faster, and the next shockwave comes sooner.
+            chaseSpeed += 0.6f;
+            waveTimer = Mathf.Min(waveTimer, 1.6f);
             dazed = 1.4f;
             if (gm != null)
             {
@@ -729,6 +761,9 @@ namespace MayaAdventure
 
         protected override void Update()
         {
+            bool near = !Dead && EnemyArt.PlayerNear(transform.position, 20f, out _);
+            if (near) Engaged = this;
+            else if (Engaged == this) Engaged = null;
             if (Dead) return;
             float dt = Time.deltaTime;
             if (invulnerable > 0f)
@@ -752,7 +787,7 @@ namespace MayaAdventure
 
         IEnumerator JumpSlam()
         {
-            waveTimer = 5f + Random.value * 2f;
+            waveTimer = 3.2f + Random.value * 1.6f; // more aggressive than before
             dazed = 1.1f;
             var start = body.localPosition;
             for (float t = 0f; t < 0.9f; t += Time.deltaTime)
@@ -776,7 +811,8 @@ namespace MayaAdventure
             if (wave < 0f) return;
             wave += dt;
             float r = wave * 9f;
-            ring.localScale = new Vector3(r * 2f, 0.03f, r * 2f);
+            ring.localScale = Vector3.one;
+            BuildRing(r);
             var gm = GameManager.I;
             if (gm != null && gm.Player != null && gm.Player.Grounded)
             {
@@ -789,6 +825,37 @@ namespace MayaAdventure
                 wave = -1f;
                 ring.gameObject.SetActive(false);
             }
+        }
+
+        void BuildRing(float r)
+        {
+            const int seg = 64;
+            float inner = Mathf.Max(0f, r - 0.55f), wobble = Mathf.Sin(Time.time * 30f) * 0.04f;
+            for (int i = 0; i <= seg; i++)
+            {
+                float a = i * Mathf.PI * 2f / seg;
+                var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                ringVerts[i * 2] = d * inner + Vector3.up * 0.06f;
+                ringVerts[i * 2 + 1] = d * r + Vector3.up * (0.22f + wobble);
+            }
+            if (ringTris == null)
+            {
+                ringTris = new int[seg * 12];
+                for (int i = 0; i < seg; i++)
+                {
+                    int a0 = i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3, t = i * 12;
+                    // both faces, so it reads from any angle
+                    ringTris[t] = a0; ringTris[t + 1] = a1; ringTris[t + 2] = b0;
+                    ringTris[t + 3] = b0; ringTris[t + 4] = a1; ringTris[t + 5] = b1;
+                    ringTris[t + 6] = a0; ringTris[t + 7] = b0; ringTris[t + 8] = a1;
+                    ringTris[t + 9] = b0; ringTris[t + 10] = b1; ringTris[t + 11] = a1;
+                }
+                ringMesh.vertices = ringVerts;
+                ringMesh.triangles = ringTris;
+            }
+            ringMesh.vertices = ringVerts;
+            ringMesh.RecalculateNormals();
+            ringMesh.RecalculateBounds();
         }
 
         protected override void OnDefeated()

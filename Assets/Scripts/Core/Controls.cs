@@ -14,13 +14,13 @@ namespace MayaAdventure
         public static Vector2 Look => TouchControls.Active ? TouchControls.Look
                                                            : new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * 3f;
         public static float Zoom => Input.mouseScrollDelta.y + TouchControls.Pinch;
-        public static bool JumpDown => Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.JoystickButton0) || TouchControls.ADown;
-        public static bool JumpHeld => Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.JoystickButton0) || TouchControls.AHeld;
+        public static bool JumpDown => Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.JoystickButton0) || TouchControls.ADown || ScriptedInput.JumpDown;
+        public static bool JumpHeld => Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.JoystickButton0) || TouchControls.AHeld || ScriptedInput.JumpHeld;
         public static bool PoundDown => Input.GetKeyDown(KeyCode.LeftControl) || Input.GetKeyDown(KeyCode.E) ||
-                                        Input.GetKeyDown(KeyCode.JoystickButton1) || TouchControls.BDown;
+                                        Input.GetKeyDown(KeyCode.JoystickButton1) || TouchControls.BDown || ScriptedInput.PoundDown;
         public static bool PoundHeld => Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.E) || Input.GetKey(KeyCode.JoystickButton1) ||
-                                        TouchControls.BHeld;
-        public static bool PunchDown => Input.GetKeyDown(KeyCode.F) || Input.GetKeyDown(KeyCode.JoystickButton2) || 
+                                        TouchControls.BHeld || ScriptedInput.PoundHeld;
+        public static bool PunchDown => Input.GetKeyDown(KeyCode.F) || Input.GetKeyDown(KeyCode.JoystickButton2) || ScriptedInput.PunchDown || 
                                         (!TouchControls.Active && Cursor.lockState == CursorLockMode.Locked && Input.GetMouseButtonDown(0));
         public static bool WalkHeld => Input.GetKey(KeyCode.LeftShift);
         // Escape is also the Android back button.

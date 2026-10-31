@@ -145,6 +145,7 @@ namespace MayaAdventure
                 r.enabled = visible;
                 r.renderingLayerMask = 1u | FillLayer;
             }
+            ApplyCharacterShader();
             SetPower(power);
         }
 
@@ -444,6 +445,33 @@ namespace MayaAdventure
             }
         }
 
+        /// <summary>Swaps the imported glTF materials for Maya/Character (soft portrait lighting), keeping texture and tint.</summary>
+        void ApplyCharacterShader()
+        {
+            var shader = Shader.Find("Maya/Character");
+            if (shader == null) return;
+            foreach (var r in renderers)
+            {
+                if (r == null || (wings != null && r.transform.IsChildOf(wings))) continue;
+                var mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    var m = mats[i];
+                    if (m == null || m.shader == shader) continue;
+                    var c = new Material(shader) { name = m.name + " (Maya)" };
+                    if (m.HasProperty("baseColorTexture")) c.SetTexture("baseColorTexture", m.GetTexture("baseColorTexture"));
+                    if (m.HasProperty("baseColorFactor")) c.SetColor("baseColorFactor", m.GetColor("baseColorFactor"));
+                    if (m.HasProperty("normalTexture") && m.GetTexture("normalTexture") != null)
+                    {
+                        c.SetTexture("normalTexture", m.GetTexture("normalTexture"));
+                        if (m.HasProperty("normalTexture_scale")) c.SetFloat("normalTexture_scale", m.GetFloat("normalTexture_scale"));
+                    }
+                    mats[i] = c;
+                }
+                r.sharedMaterials = mats;
+            }
+        }
+
         /// <summary>Lifts Maya's albedo a little so she reads clearly against the bright levels.</summary>
         static void Brighten(Renderer r, MaterialPropertyBlock block)
         {
@@ -452,7 +480,7 @@ namespace MayaAdventure
             if (m == null || !m.HasProperty("baseColorFactor")) return;
             var c = m.GetColor("baseColorFactor");
             block.Clear();
-            block.SetColor("baseColorFactor", new Color(c.r * 1.25f, c.g * 1.2f, c.b * 1.15f, c.a));
+            block.SetColor("baseColorFactor", new Color(c.r * 1.04f, c.g * 1.06f, c.b * 1.1f, c.a)); // neutral: warm skin goes orange under ACES
             r.SetPropertyBlock(block);
         }
 

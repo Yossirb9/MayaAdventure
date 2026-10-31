@@ -164,6 +164,30 @@ namespace MayaAdventure.EditorTools
             yield return 1f;
             Log($"after continue: state={gm.State} level={gm.LevelIndex}");
 
+            // Progress must survive travelling to another world and back.
+            {
+                PowerStar first = null;
+                foreach (var st in Object.FindObjectsByType<PowerStar>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    if (st.Id.StartsWith("0-") && st.gameObject.activeInHierarchy && (first == null || string.CompareOrdinal(st.Id, first.Id) < 0)) first = st;
+                string id = first.Id;
+                gm.CollectStar(first);
+                Coin red = null;
+                foreach (var c in Object.FindObjectsByType<Coin>(FindObjectsSortMode.None)) if (c.Red) { red = c; break; }
+                if (red != null) { gm.CollectCoin(true, red.transform.position); Object.Destroy(red.gameObject); }
+                int coins = gm.Coins, starsBefore = gm.Stars, redBefore = gm.RedCoins, lives = gm.Lives;
+                int coinObjs = Object.FindObjectsByType<Coin>(FindObjectsSortMode.None).Length;
+                yield return 0.5f;
+                gm.EnterLevel(1);
+                yield return 2.5f;
+                gm.EnterLevel(0);
+                yield return 2.5f;
+                PowerStar again = null;
+                foreach (var st in Object.FindObjectsByType<PowerStar>(FindObjectsInactive.Include, FindObjectsSortMode.None)) if (st.Id == id) again = st;
+                Log($"travel 0->1->0: stars {starsBefore}->{gm.Stars}, coins {coins}->{gm.Coins}, lives {lives}->{gm.Lives}, red {redBefore}->{gm.RedCoins}, " +
+                    $"coin objects {coinObjs}->{Object.FindObjectsByType<Coin>(FindObjectsSortMode.None).Length}, star {id} ghost={(again != null && again.AlreadyCollected)}, saved='{PlayerPrefs.GetString("maya_stars_v1")}'");
+                if (gm.Stars != starsBefore || again == null || !again.AlreadyCollected) { errors++; Log("PROGRESS LOST after travelling"); }
+            }
+
             for (int k = 0; k < Levels.Count; k++)
             {
                 gm.EnterLevel(k);

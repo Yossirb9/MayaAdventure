@@ -264,7 +264,7 @@ namespace MayaAdventure
             checkpoint = returning ? level.ReturnSpawn : level.Start;
             checkpointYaw = returning ? level.ReturnYaw : level.StartYaw;
             Physics.SyncTransforms(); // the new world's colliders must exist before Maya lands on them
-            Player.Teleport(checkpoint, checkpointYaw);
+            Player.Teleport(checkpoint, checkpointYaw, false);
             Cam.Snap();
             CameraUnderwater = false;
             StartCoroutine(SpawnGuard(checkpoint, checkpointYaw));
@@ -281,7 +281,7 @@ namespace MayaAdventure
                 if (new Vector2(p.x - spawn.x, p.z - spawn.z).sqrMagnitude > 100f || p.y < spawn.y - 3f)
                 {
                     Debug.LogWarning($"[Maya] Spawn moved to {p}, back to {spawn}");
-                    Player.Teleport(spawn, yaw);
+                    Player.Teleport(spawn, yaw, false);
                     Cam.Snap();
                 }
             }
@@ -445,7 +445,7 @@ namespace MayaAdventure
             var camPos = m - f * 2.45f + r * 0.8f + Vector3.up * 1.12f;
             var toCam = camPos - m;
             titleFacing = Mathf.Atan2(toCam.x, toCam.z) * Mathf.Rad2Deg;
-            Player.Teleport(m, titleFacing); // looks straight at the player
+            Player.Teleport(m, titleFacing, false); // looks straight at the player, no respawn blinking
             Cam.TitleShot(camPos, m + f * 5f + r * 1.95f + Vector3.up * 1.2f);
             titleDanceAt = Time.time + 2.5f;
         }
@@ -483,7 +483,7 @@ namespace MayaAdventure
             if (State == GameState.Title || Cam.TitleMode)
             {
                 // Leave the title pose: back to the world's start.
-                Player.Teleport(checkpoint, checkpointYaw);
+                Player.Teleport(checkpoint, checkpointYaw, false);
             }
             State = GameState.Playing;
             LockCursor(true);
@@ -651,7 +651,7 @@ namespace MayaAdventure
 
         public void Damage(int amount, Vector3 source)
         {
-            if (Player.Invulnerable || State != GameState.Playing || Player.Power == PowerKind.Metal) return;
+            if (Player.Invulnerable || State != GameState.Playing || Player.Power == PowerKind.Metal || ScriptedInput.Active) return;
             Health -= amount;
             Sfx.Play(Sfx.Hurt);
             Player.Knockback(source);
