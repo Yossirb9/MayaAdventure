@@ -11,9 +11,7 @@ Shader "Maya/Character"
         normalTexture_scale ("Normal Scale", Float) = 1
         metallicFactor ("Metal", Range(0, 1)) = 0
         _FaceTex ("Face Expressions", 2D) = "white" {}
-        _FaceRect ("Face Rect (uv min, max)", Vector) = (0, 0, 0, 0)
-        _FaceRect2 ("Eye Corner Rect", Vector) = (0, 0, 0, 0)
-        _FaceLayout ("Atlas: split, rect2 height, tiles", Vector) = (1, 1, 1, 0)
+        _FaceTiles ("Expression Tiles", Float) = 1
         _FaceIndex ("Expression", Float) = 0
         _JacketTint ("Jacket Colour (a = on)", Color) = (0, 0, 0, 0)
         _Wrap ("Light Wrap", Range(0, 1)) = 0.55
@@ -31,14 +29,33 @@ Shader "Maya/Character"
         CBUFFER_START(UnityPerMaterial)
             float4 baseColorTexture_ST;
             half4 baseColorFactor;
-            float4 _FaceRect, _FaceRect2, _FaceLayout;
-            float _FaceIndex;
+            float _FaceIndex, _FaceTiles;
             half4 _JacketTint;
             half normalTexture_scale, metallicFactor, _Wrap, _ShadowSoftness, _Fill, _Rim, _Saturation;
         CBUFFER_END
         TEXTURE2D(baseColorTexture); SAMPLER(sampler_baseColorTexture);
         TEXTURE2D(normalTexture); SAMPLER(sampler_normalTexture);
         TEXTURE2D(_FaceTex); SAMPLER(sampler_FaceTex);
+        // Pairs of (texture rect, its place in an atlas tile), set from FaceAtlasData (Tools~/make_faces.py).
+        float4 _FaceRects[16];
+        int _FaceRectCount;
+
+        /// Is uv on one of the face patches the expressions repaint? If so, where in an atlas tile.
+        bool FacePatch(float2 uv, out float2 tile)
+        {
+            tile = 0;
+            for (int k = 0; k < _FaceRectCount; k++)
+            {
+                float4 r = _FaceRects[k * 2], a = _FaceRects[k * 2 + 1];
+                float2 l = (uv - r.xy) / (r.zw - r.xy);
+                if (all(l >= 0) && all(l <= 1))
+                {
+                    tile = lerp(a.xy, a.zw, l);
+                    return true;
+                }
+            }
+            return false;
+        }
         ENDHLSL
 
         Pass
@@ -83,25 +100,22 @@ Shader "Maya/Character"
             {
                 // Negative mip bias keeps her eyes and face crisp at game distance.
                 half3 albedo = SAMPLE_TEXTURE2D_BIAS(baseColorTexture, sampler_baseColorTexture, i.uv, -0.8).rgb;
-                if (_FaceIndex > 0.5)
+                float2 tile;
+                bool onFace = FacePatch(i.uv, tile);
+                half keepNormal = 1;
+                if (_FaceIndex > 0.5 && onFace)
                 {
-                    // Expressions: the face parts of the texture come from a tile of the expression atlas instead.
-                    // Each tile = the face rect on the left, the small eye-corner rect top-right.
-                    float2 l1 = (i.uv - _FaceRect.xy) / (_FaceRect.zw - _FaceRect.xy);
-                    float2 l2 = (i.uv - _FaceRect2.xy) / (_FaceRect2.zw - _FaceRect2.xy);
-                    bool in1 = all(l1 >= 0) && all(l1 <= 1);
-                    bool in2 = all(l2 >= 0) && all(l2 <= 1);
-                    float2 t = in1 ? float2(l1.x * _FaceLayout.x, l1.y)
-                                   : float2(_FaceLayout.x + l2.x * (1 - _FaceLayout.x), 1 - _FaceLayout.y + l2.y * _FaceLayout.y);
-                    t.y = (t.y + (_FaceLayout.z - 1 - _FaceIndex)) / _FaceLayout.z;
-                    half3 face = SAMPLE_TEXTURE2D_GRAD(_FaceTex, sampler_FaceTex, t, ddx(i.uv) * 2, ddy(i.uv) * 2).rgb;
-                    albedo = (in1 || in2) ? face : albedo;
+                    // Expressions: the face patches come from this expression's tile of the atlas instead.
+                    tile.y = (tile.y + (_FaceTiles - 1 - _FaceIndex)) / _FaceTiles;
+                    // No mips: the tiles sit side by side, so blurred levels would bleed into each other.
+                    half4 face = SAMPLE_TEXTURE2D_LOD(_FaceTex, sampler_FaceTex, tile, 0);
+                    // a = how much was repainted: elsewhere the original texture stays, so no patch edges show.
+                    albedo = lerp(albedo, face.rgb, face.a);
+                    keepNormal = 1 - face.a * 0.9; // closed eyes / open mouth: no sculpted eyeball or lips showing through
                 }
                 if (_JacketTint.a > 0.01)
                 {
                     // Recolour the pink clothes (jacket, sneakers, shirt hearts) but never the face.
-                    float2 f1 = (i.uv - _FaceRect.xy) / (_FaceRect.zw - _FaceRect.xy);
-                    bool onFace = all(f1 >= 0) && all(f1 <= 1);
                     half pink = saturate((albedo.r - albedo.g) * 5 - 0.5) * saturate((albedo.b - albedo.g + 0.04) * 10);
                     half lum = dot(albedo, half3(0.299, 0.587, 0.114));
                     albedo = lerp(albedo, _JacketTint.rgb * lum * 1.35, onFace ? 0 : pink * _JacketTint.a);
@@ -112,6 +126,7 @@ Shader "Maya/Character"
 
                 // The model's normal map carries the smooth surface of the sculpt (the mesh itself is faceted).
                 half3 tn = UnpackNormalScale(SAMPLE_TEXTURE2D(normalTexture, sampler_normalTexture, i.uv), normalTexture_scale);
+                tn = normalize(lerp(half3(0, 0, 1), tn, keepNormal));
                 float3 bitangent = i.tangent.w * cross(i.normal, i.tangent.xyz);
                 float3 n = normalize(TransformTangentToWorld(tn, half3x3(i.tangent.xyz, bitangent, i.normal)));
                 float3 v = normalize(GetCameraPositionWS() - i.world);

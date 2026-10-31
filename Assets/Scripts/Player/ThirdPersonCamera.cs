@@ -10,7 +10,7 @@ namespace MayaAdventure
         public float distance = 7.5f, minDistance = 3f, maxDistance = 13f;
         public float minPitch = -5f, maxPitch = 65f;
 
-        float yaw, pitch = 18f, currentDistance, idleLook, celebrateUntil;
+        float yaw, pitch = 18f, currentDistance, idleLook;
         static float shake;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -22,9 +22,6 @@ namespace MayaAdventure
             if (GameSettings.Vibration) Haptics.Pulse(amount > 0.25f ? 45 : 25);
             shake = Mathf.Max(shake, amount);
         }
-
-        /// <summary>Swing round to look Maya in the face for a moment (she just got a star).</summary>
-        public void CelebrateShot(float seconds) => celebrateUntil = Time.time + seconds;
         Vector3 focus;
         const int Mask = ~(1 << 2); // everything but Ignore Raycast (Maya); also sees the tree-crown blockers on layer 1
 
@@ -63,31 +60,21 @@ namespace MayaAdventure
                 distance = Mathf.Clamp(distance - Controls.Zoom * 1.2f, minDistance, maxDistance);
                 idleLook = look.sqrMagnitude > 0.01f ? 0f : idleLook + dt;
 
-                // Swing behind Maya while she runs, if the player isn't steering the camera (sooner and faster on
-                // a phone, where turning the camera by hand is harder), and settle back to a comfortable height.
+                // Gently swing behind Maya while she runs, if the player isn't steering the camera.
                 var maya = Target.GetComponent<MayaController>();
-                bool touch = TouchControls.Active;
-                if (idleLook > (touch ? 0.6f : 1.2f) && maya != null && (maya.Grounded || touch) &&
+                if (idleLook > 1.2f && maya != null && maya.Grounded &&
                     new Vector2(maya.Velocity.x, maya.Velocity.z).sqrMagnitude > 4f)
                 {
                     float behind = Target.eulerAngles.y;
-                    if (Mathf.Abs(Mathf.DeltaAngle(yaw, behind)) < (touch ? 135f : 100f))
-                        yaw = Mathf.MoveTowardsAngle(yaw, behind, (touch ? 70f : 35f) * dt);
+                    if (Mathf.Abs(Mathf.DeltaAngle(yaw, behind)) < 100f)
+                        yaw = Mathf.MoveTowardsAngle(yaw, behind, 35f * dt);
                 }
-                if (touch && idleLook > 2f) pitch = Mathf.MoveTowards(pitch, 16f, 10f * dt);
             }
             else
             {
                 yaw += 8f * dt; // slow showcase orbit on menus
             }
             float dist = distance;
-            if (Time.time < celebrateUntil)
-            {
-                // In front of her, a little lower and closer, while she dances.
-                yaw = Mathf.MoveTowardsAngle(yaw, Target.eulerAngles.y + 180f, 260f * dt);
-                pitch = Mathf.MoveTowards(pitch, 6f, 40f * dt);
-                dist = Mathf.Min(distance, 4.2f);
-            }
             pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
 
             Vector3 desired = Target.position + Vector3.up * 1.4f;

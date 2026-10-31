@@ -622,8 +622,11 @@ namespace MayaAdventure
             Debris.Burst(transform.position + Vector3.up * 1.2f, new Color(1f, 0.85f, 0.4f), 14, 3f);
         }
 
-        /// <summary>A little victory dance after collecting a star.</summary>
+        /// <summary>A little victory dance (title screen, trailer).</summary>
         public void Celebrate() => model.Celebrate(1.6f);
+
+        /// <summary>A quick happy face without stopping her (after a star).</summary>
+        public void SmileBriefly() => model.Express(MayaModel.Face.Happy, 1.2f);
 
         public void Bounce(float speed)
         {

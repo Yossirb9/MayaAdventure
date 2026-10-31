@@ -481,11 +481,20 @@ namespace MayaAdventure
                     var faces = Resources.Load<Texture2D>("Characters/face_expressions");
                     if (main != null && main.name.Contains("texture_0") && faces != null)
                     {
-                        // Rects in texture pixels (2048 texture, rows from the top), matching Tools~/make_faces.py.
+                        // Where the expression atlas sits on her texture (generated with it by Tools~/make_faces.py).
                         c.SetTexture("_FaceTex", faces);
-                        c.SetVector("_FaceRect", PixelRect(380, 1480, 780, 1720));
-                        c.SetVector("_FaceRect2", PixelRect(1340, 80, 1460, 200));
-                        c.SetVector("_FaceLayout", new Vector4(400f / 520f, 0.5f, 5f, 0f));
+                        var rects = new Vector4[16];
+                        int count = 0;
+                        for (int k = 0; k + 1 < FaceAtlasData.Rects.Length && count < 8; k += 2)
+                        {
+                            if (FaceAtlasData.Rects[k] == Vector4.zero) continue;
+                            rects[count * 2] = FaceAtlasData.Rects[k];
+                            rects[count * 2 + 1] = FaceAtlasData.Rects[k + 1];
+                            count++;
+                        }
+                        c.SetVectorArray("_FaceRects", rects);
+                        c.SetInt("_FaceRectCount", count);
+                        c.SetFloat("_FaceTiles", FaceAtlasData.Tiles);
                         if (!faceRenderers.Contains(r)) faceRenderers.Add(r);
                     }
                     if (m.HasProperty("normalTexture") && m.GetTexture("normalTexture") != null)
@@ -622,9 +631,6 @@ namespace MayaAdventure
             capeMesh.RecalculateNormals();
             capeMesh.RecalculateBounds();
         }
-
-        static Vector4 PixelRect(float x0, float y0, float x1, float y1) =>
-            new Vector4(x0 / 2048f, 1f - y1 / 2048f, x1 / 2048f, 1f - y0 / 2048f);
 
         // ---------- face ----------
 

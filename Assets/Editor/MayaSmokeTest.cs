@@ -263,6 +263,15 @@ namespace MayaAdventure.EditorTools
                              gm.Player.transform.position + Vector3.up * 1.38f);
                     }
                     faceModel.Express(MayaModel.Face.Normal, 0f);
+                    // Mid-dance (title screen): the happy face must stay straight while she moves.
+                    gm.Player.Celebrate();
+                    for (int d = 0; d < 3; d++)
+                    {
+                        yield return 0.45f;
+                        var hp = gm.Player.transform.position;
+                        var hf = gm.Player.transform.forward;
+                        Shot($"face_dance{d}", hp + hf * 1.6f + Vector3.up * 1.4f, hp + Vector3.up * 1.25f);
+                    }
                     // New pickup models side by side.
                     {
                         var show = new GameObject("Showcase").transform;
