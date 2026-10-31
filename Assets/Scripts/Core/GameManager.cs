@@ -743,7 +743,6 @@ namespace MayaAdventure
             }
             collected.Add(star.Id);
             SaveProgress();
-            Player.SmileBriefly();
             StartCoroutine(NextMissionSoon());
             Debris.Burst(star.transform.position, new Color(1f, 0.9f, 0.35f), 30, 7f);
             Haptics.Pulse(60);

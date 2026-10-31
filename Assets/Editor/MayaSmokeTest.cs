@@ -160,6 +160,19 @@ namespace MayaAdventure.EditorTools
                 Log($"new game t={i * 0.5f + 0.5f:F1}: maya {mp} grounded={gm.Player.Grounded} swimming={gm.Player.Swimming} state={gm.State} level={gm.LevelIndex}");
             }
             Shot("newgame");
+            {
+                // What ground is Maya standing on (object, material, shader)?
+                var mp0 = gm.Player.transform.position + Vector3.up;
+                foreach (var hit in Physics.RaycastAll(mp0, Vector3.down, 5f, ~(1 << 2), QueryTriggerInteraction.Ignore))
+                {
+                    var rend = hit.collider.GetComponent<Renderer>();
+                    string mats = rend == null ? "-" : string.Join(", ", System.Array.ConvertAll(rend.sharedMaterials, m => m == null ? "null" : m.name + "/" + m.shader.name));
+                    Log($"ground under maya: {hit.collider.name} at {hit.distance:F2}: {mats}");
+                }
+                foreach (var r in Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                    if (r.bounds.Contains(new Vector3(mp0.x, r.bounds.center.y, mp0.z)) && r.bounds.size.x > 20f)
+                        Log($"big renderer: {r.name} {r.bounds.size} {string.Join(", ", System.Array.ConvertAll(r.sharedMaterials, m => m == null ? "null" : m.name + "/" + m.shader.name))}");
+            }
             gm.ContinueGame();
             yield return 1f;
             Log($"after continue: state={gm.State} level={gm.LevelIndex}");

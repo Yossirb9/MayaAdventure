@@ -77,6 +77,19 @@ namespace MayaAdventure
         {
             string key = $"lawn{tint}{tiling}";
             if (materials.TryGetValue(key, out var m) && m != null) return m;
+            var lawn = Shader.Find("Maya/Lawn");
+            if (lawn != null)
+            {
+                // Painted in world space with sunny / dry / lush patches (tiling no longer matters).
+                bool snow = tint.grayscale > 0.85f;
+                m = new Material(lawn) { name = key };
+                // Warmer, more natural greens than the minty block tint, with dry and deep patches.
+                var grass = Color.Lerp(tint, new Color(0.36f, 0.62f, 0.24f) * (tint.grayscale / 0.55f), 0.6f);
+                m.SetColor("_BaseColor", snow ? tint : grass);
+                m.SetColor("_DryColor", snow ? tint * 1.03f : Color.Lerp(grass, new Color(0.8f, 0.76f, 0.38f), 0.5f));
+                m.SetColor("_LushColor", snow ? new Color(tint.r * 0.88f, tint.g * 0.92f, tint.b, 1f) : Color.Lerp(grass * 0.62f, new Color(0.08f, 0.3f, 0.16f), 0.35f));
+                return materials[key] = m;
+            }
             m = new Material(Standard) { name = key, mainTexture = Tex("lawn"), mainTextureScale = new Vector2(tiling, tiling), color = tint };
             Surface(m, 0.08f, 0f);
             return materials[key] = m;

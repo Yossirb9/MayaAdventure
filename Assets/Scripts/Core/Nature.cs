@@ -135,6 +135,8 @@ namespace MayaAdventure
 
         public enum Cover { Meadow, Dusk, Beach, Snow }
 
+        static readonly Color MeadowGrassTint = new Color(0.8f, 0.86f, 0.62f);
+
         /// <summary>Scatters grass, clover, flowers and pebbles over a flat island top (drawn with GPU instancing).</summary>
         public static void Scatter(Transform parent, Vector3 center, float radius, float top, Cover cover, int seed)
         {
@@ -162,8 +164,9 @@ namespace MayaAdventure
                 float s = 0.55f + (float)rng.NextDouble() * 0.6f;
                 if (kind.Contains("Pebble")) s *= 0.35f;
                 if (kind.Contains("Flower") || kind.Contains("Fern") || kind.Contains("Mushroom")) s *= 0.6f;
-                field.Add(Load(kind), Matrix4x4.TRS(p, Quaternion.Euler(0f, (float)rng.NextDouble() * 360f, 0f), Vector3.one * s),
-                          cover == Cover.Snow ? SnowTint : (Color?)null);
+                // Grass tufts in a softer, warmer green so they sit into the lawn instead of glowing on top of it.
+                Color? tint = cover == Cover.Snow ? SnowTint : kind.Contains("Grass") && cover == Cover.Meadow ? MeadowGrassTint : (Color?)null;
+                field.Add(Load(kind), Matrix4x4.TRS(p, Quaternion.Euler(0f, (float)rng.NextDouble() * 360f, 0f), Vector3.one * s), tint);
             }
         }
     }

@@ -393,17 +393,9 @@ namespace MayaAdventure
             currentClip = null; // force the cross-fade even if the same clip played before
         }
 
-        public void Hurt()
-        {
-            PlayOnce("Hit", 0.4f, 1.2f);
-            Express(Face.Hurt, 0.9f);
-        }
+        public void Hurt() => PlayOnce("Hit", 0.4f, 1.2f);
 
-        public void Celebrate(float seconds)
-        {
-            PlayOnce("Dance", seconds);
-            Express(Face.Happy, seconds);
-        }
+        public void Celebrate(float seconds) => PlayOnce("Dance", seconds);
 
         public void Flip(float duration, FlipAxis axis = FlipAxis.Forward)
         {
@@ -634,7 +626,8 @@ namespace MayaAdventure
 
         // ---------- face ----------
 
-        public enum Face { Normal, Blink, Happy, Hurt, Surprised }
+        // Her own face, blinking every few seconds (the only expression: the others looked odd on this model).
+        public enum Face { Normal, Blink }
 
         readonly System.Collections.Generic.List<Renderer> faceRenderers = new System.Collections.Generic.List<Renderer>();
         MaterialPropertyBlock faceBlock; // created on first use: Unity forbids it in field initialisers
@@ -642,7 +635,7 @@ namespace MayaAdventure
         float heldUntil, nextBlink = 2f, blinkUntil;
         bool faceDirty = true;
 
-        /// <summary>Shows an expression for a while (joy, pain...); blinking and surprise take over again after it.</summary>
+        /// <summary>Holds a face for a while (used by the smoke test to look at the blink).</summary>
         public void Express(Face f, float seconds)
         {
             held = f;
@@ -653,7 +646,6 @@ namespace MayaAdventure
         {
             var f = Face.Normal;
             if (Time.time < heldUntil) f = held;
-            else if (!grounded && !Swimming && verticalSpeed < -12f && airTime > 0.6f) f = Face.Surprised; // a long fall
             else
             {
                 if (Time.time > nextBlink)

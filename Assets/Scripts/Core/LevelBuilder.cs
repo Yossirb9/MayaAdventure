@@ -237,7 +237,8 @@ namespace MayaAdventure
                 mat = new Material(shader);
                 mat.SetColor("_Shallow", theme.WaterShallow);
                 mat.SetColor("_Deep", theme.WaterDeep);
-                mat.SetColor("_SkyColor", Color.Lerp(theme.SkyHorizon, theme.SkyTop, 0.35f));
+                mat.SetColor("_SkyColor", Color.Lerp(theme.SkyHorizon, theme.SkyTop, 0.2f));
+                mat.SetColor("_SkyTop", Color.Lerp(theme.SkyHorizon, theme.SkyTop, 0.85f));
             }
             else
             {

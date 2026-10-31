@@ -25,7 +25,7 @@ LASH = (62, 36, 28)
 DARK = (110, 26, 40)
 TEETH = (252, 248, 242)
 TONGUE = (226, 96, 108)
-NAMES = ["Normal", "Blink", "Happy", "Hurt", "Surprised"]
+NAMES = ["Normal", "Blink"]  # the game only blinks; Happy/Hurt/Surprised are still paintable here
 
 
 def ellipse_mask(size, c, rx, ry, feather):

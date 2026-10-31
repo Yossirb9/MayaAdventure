@@ -625,9 +625,6 @@ namespace MayaAdventure
         /// <summary>A little victory dance (title screen, trailer).</summary>
         public void Celebrate() => model.Celebrate(1.6f);
 
-        /// <summary>A quick happy face without stopping her (after a star).</summary>
-        public void SmileBriefly() => model.Express(MayaModel.Face.Happy, 1.2f);
-
         public void Bounce(float speed)
         {
             velocity.y = speed;
