@@ -122,13 +122,9 @@ namespace MayaAdventure
                     Box("Rail", mid + Vector3.up * 0.6f, new Vector3((p1 - p0).magnitude, 1.2f, 0.2f), plank, null, yaw);
                 }
             }
+            // The giant Snowman guards the arena's star.
             var star = PowerStar.Build(root, Arena + Vector3.up * 1.8f, "קרב כדורי השלג", true);
-            RevealWhenCleared.Watch(root, star, "כל האויבים הובסו - כוכב הופיע בזירה!",
-                Grumble.Build(root, Arena + new Vector3(3f, 0f, 3f)),
-                Grumble.Build(root, Arena + new Vector3(-3f, 0f, 4f)),
-                Grumble.Build(root, Arena + new Vector3(-4f, 0f, -3f)),
-                Grumble.Build(root, Arena + new Vector3(3f, 0f, -4f)),
-                Grumble.Build(root, Arena + new Vector3(0f, 0f, 0.5f)));
+            GiantBoss.Build(root, Arena, GiantBoss.Kind.Snowman, star);
             CoinRing(Arena + Vector3.up * 0.8f, 6.5f, 10);
         }
 

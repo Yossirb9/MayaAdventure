@@ -50,9 +50,43 @@ namespace MayaAdventure
             return star;
         }
 
+        GameObject beacon;
+        static Material beaconMat;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetBeacon() => beaconMat = null;
+
+        /// <summary>A tall soft pillar of light over the star: "your mission is here".</summary>
+        public void SetBeacon(bool on)
+        {
+            if (on && beacon == null)
+            {
+                if (beaconMat == null)
+                {
+                    var tex = new Texture2D(4, 64, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+                    for (int y = 0; y < 64; y++)
+                    {
+                        float v = y / 63f; // 0 at the star, 1 at the top
+                        for (int x = 0; x < 4; x++) tex.SetPixel(x, y, new Color(1f, 1f, 1f, (1f - v) * (1f - v) * Mathf.Clamp01(v * 12f)));
+                    }
+                    tex.Apply();
+                    beaconMat = Art.Particle(tex, true);
+                    if (beaconMat != null) beaconMat.color = new Color(1f, 0.85f, 0.35f, 0.5f);
+                }
+                if (beaconMat == null) return;
+                var mesh = Art.LatheMesh("Beacon", new[] { new Vector2(0.45f, 0f), new Vector2(0.55f, 14f), new Vector2(0.6f, 28f) }, 16);
+                beacon = Art.MeshObject("Beacon", mesh, transform, new Vector3(0f, 0.6f, 0f), Vector3.one, beaconMat);
+                var r = beacon.GetComponent<MeshRenderer>();
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+            }
+            if (beacon != null) beacon.SetActive(on);
+        }
+
         public void Reveal()
         {
             gameObject.SetActive(true);
+            GameManager.I?.UpdateMission();
             Debris.Burst(transform.position, new Color(1f, 0.9f, 0.3f), 24, 6f);
         }
 

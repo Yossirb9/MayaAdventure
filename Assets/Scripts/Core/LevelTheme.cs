@@ -46,7 +46,7 @@ namespace MayaAdventure
             CloudAmount = 0.6f,
             CloudShade = new Color(0.72f, 0.76f, 0.86f),
             FogColor = new Color(0.82f, 0.87f, 0.96f),
-            FogStart = 60f, FogEnd = 300f,
+            FogStart = 22f, FogEnd = 150f, // misty peaks
             AmbientSky = new Color(0.66f, 0.74f, 0.95f),
             AmbientEquator = new Color(0.62f, 0.66f, 0.74f),
             AmbientGround = new Color(0.55f, 0.57f, 0.62f),

@@ -146,6 +146,9 @@ namespace MayaAdventure
                 r.renderingLayerMask = 1u | FillLayer;
             }
             ApplyCharacterShader();
+            Outfits.Changed -= ApplyOutfits;
+            Outfits.Changed += ApplyOutfits;
+            ApplyOutfits();
             SetPower(power);
         }
 
@@ -264,6 +267,9 @@ namespace MayaAdventure
                               float pitch = 0f, float crouch = 0f)
         {
             airTime = grounded ? 0f : airTime + dt;
+            UpdateFace(grounded, verticalSpeed);
+            lastSpeed = horizontalSpeed + (grounded ? 0f : Mathf.Abs(verticalSpeed) * 0.4f);
+            AnimateCape(dt);
             // Little dust puffs from the feet while running.
             if (grounded && !Swimming && horizontalSpeed > 6f)
             {
@@ -387,9 +393,17 @@ namespace MayaAdventure
             currentClip = null; // force the cross-fade even if the same clip played before
         }
 
-        public void Hurt() => PlayOnce("Hit", 0.4f, 1.2f);
+        public void Hurt()
+        {
+            PlayOnce("Hit", 0.4f, 1.2f);
+            Express(Face.Hurt, 0.9f);
+        }
 
-        public void Celebrate(float seconds) => PlayOnce("Dance", seconds);
+        public void Celebrate(float seconds)
+        {
+            PlayOnce("Dance", seconds);
+            Express(Face.Happy, seconds);
+        }
 
         public void Flip(float duration, FlipAxis axis = FlipAxis.Forward)
         {
@@ -443,6 +457,7 @@ namespace MayaAdventure
                     Brighten(r, block);
                 }
             }
+            faceDirty = true; // the property blocks were just rebuilt
         }
 
         /// <summary>Swaps the imported glTF materials for Maya/Character (soft portrait lighting), keeping texture and tint.</summary>
@@ -459,8 +474,20 @@ namespace MayaAdventure
                     var m = mats[i];
                     if (m == null || m.shader == shader) continue;
                     var c = new Material(shader) { name = m.name + " (Maya)" };
+                    characterMats.Add(c);
                     if (m.HasProperty("baseColorTexture")) c.SetTexture("baseColorTexture", m.GetTexture("baseColorTexture"));
                     if (m.HasProperty("baseColorFactor")) c.SetColor("baseColorFactor", m.GetColor("baseColorFactor"));
+                    var main = m.HasProperty("baseColorTexture") ? m.GetTexture("baseColorTexture") : null;
+                    var faces = Resources.Load<Texture2D>("Characters/face_expressions");
+                    if (main != null && main.name.Contains("texture_0") && faces != null)
+                    {
+                        // Rects in texture pixels (2048 texture, rows from the top), matching Tools~/make_faces.py.
+                        c.SetTexture("_FaceTex", faces);
+                        c.SetVector("_FaceRect", PixelRect(380, 1480, 780, 1720));
+                        c.SetVector("_FaceRect2", PixelRect(1340, 80, 1460, 200));
+                        c.SetVector("_FaceLayout", new Vector4(400f / 520f, 0.5f, 5f, 0f));
+                        if (!faceRenderers.Contains(r)) faceRenderers.Add(r);
+                    }
                     if (m.HasProperty("normalTexture") && m.GetTexture("normalTexture") != null)
                     {
                         c.SetTexture("normalTexture", m.GetTexture("normalTexture"));
@@ -469,6 +496,177 @@ namespace MayaAdventure
                     mats[i] = c;
                 }
                 r.sharedMaterials = mats;
+            }
+        }
+
+        // ---------- wardrobe ----------
+
+        readonly System.Collections.Generic.List<Material> characterMats = new System.Collections.Generic.List<Material>();
+        GameObject crown, cape;
+        Mesh capeMesh;
+        Vector3[] capeBase, capeVerts;
+        float lastSpeed, capeLift;
+        const int CapeCols = 6, CapeRows = 10;
+
+        void OnDestroy() => Outfits.Changed -= ApplyOutfits;
+
+        /// <summary>Shows what Maya wears from her wardrobe: crown, cape, jacket colour.</summary>
+        void ApplyOutfits()
+        {
+            if (this == null || visual == null) return;
+            var tint = Outfits.JacketTint;
+            foreach (var m in characterMats) if (m != null) m.SetColor("_JacketTint", tint);
+            if (Outfits.Wears("crown") && crown == null) crown = BuildCrown();
+            if (crown != null) crown.SetActive(Outfits.Wears("crown"));
+            if (Outfits.Wears("cape") && cape == null) cape = BuildCape();
+            if (cape != null) cape.SetActive(Outfits.Wears("cape"));
+        }
+
+        Transform HeadBone()
+        {
+            foreach (var t in visual.GetComponentsInChildren<Transform>(true))
+                if (t.name == "Head" || t.name.EndsWith(":Head") || t.name.EndsWith("_Head")) return t;
+            return null;
+        }
+
+        GameObject BuildCrown()
+        {
+            var head = HeadBone();
+            if (head == null) return null;
+            // Sit it on top of her curls: the highest point of the model, above the head bone.
+            float top = float.MinValue;
+            foreach (var r in renderers) if (r != null && !(wings != null && r.transform.IsChildOf(wings))) top = Mathf.Max(top, r.bounds.max.y);
+            var go = new GameObject("Crown");
+            go.transform.position = new Vector3(head.position.x, top - 0.2f, head.position.z) - pivot.forward * 0.02f;
+            go.transform.rotation = pivot.rotation * Quaternion.Euler(-8f, 0f, 0f);
+            var gold = Art.Glow(new Color(1f, 0.8f, 0.2f), 0.45f, 0.9f, 1f);
+            var gem = Art.Glow(new Color(1f, 0.3f, 0.55f), 0.8f, 0.9f, 0f);
+            Art.MeshObject("Band", Art.LatheMesh("MayaCrown", new[]
+            {
+                new Vector2(0.085f, 0f), new Vector2(0.095f, 0f), new Vector2(0.1f, 0.03f), new Vector2(0.105f, 0.05f), new Vector2(0.09f, 0.05f), new Vector2(0.088f, 0.01f),
+            }), go.transform, Vector3.zero, Vector3.one, gold);
+            for (int i = 0; i < 5; i++)
+            {
+                var rot = Quaternion.Euler(0f, i * 72f, 0f);
+                Art.MeshObject("Point", Art.ConeMesh(), go.transform, rot * new Vector3(0f, 0.04f, 0.1f), new Vector3(0.045f, 0.075f, 0.045f), gold);
+                Art.Prim(PrimitiveType.Sphere, "Gem", go.transform, rot * new Vector3(0f, 0.025f, 0.104f), Vector3.one * 0.022f, gem, Art.Col.None);
+            }
+            go.transform.SetParent(head, true);
+            foreach (var r in go.GetComponentsInChildren<Renderer>()) r.renderingLayerMask = 1u | FillLayer;
+            return go;
+        }
+
+        GameObject BuildCape()
+        {
+            var back = upperSpine != null ? upperSpine : spine;
+            if (back == null) return null;
+            var go = new GameObject("Cape");
+            // Hangs from the shoulders, down her back.
+            go.transform.position = back.position + pivot.up * 0.14f - pivot.forward * 0.13f;
+            go.transform.rotation = pivot.rotation;
+            capeMesh = new Mesh { name = "Cape" };
+            capeMesh.MarkDynamic();
+            capeBase = new Vector3[(CapeCols + 1) * (CapeRows + 1)];
+            var uv = new Vector2[capeBase.Length];
+            var tris = new System.Collections.Generic.List<int>();
+            for (int r = 0; r <= CapeRows; r++)
+                for (int c = 0; c <= CapeCols; c++)
+                {
+                    float u = c / (float)CapeCols, v = r / (float)CapeRows;
+                    float width = Mathf.Lerp(0.3f, 0.52f, v); // narrow at the shoulders, wide at the hem
+                    capeBase[r * (CapeCols + 1) + c] = new Vector3((u - 0.5f) * width, -v * 0.78f, -0.02f * Mathf.Sin(u * Mathf.PI));
+                    uv[r * (CapeCols + 1) + c] = new Vector2(u, v);
+                    if (r < CapeRows && c < CapeCols)
+                    {
+                        int a = r * (CapeCols + 1) + c, b = a + CapeCols + 1;
+                        tris.AddRange(new[] { a, a + 1, b, b, a + 1, b + 1 });
+                    }
+                }
+            capeVerts = (Vector3[])capeBase.Clone();
+            capeMesh.vertices = capeVerts;
+            capeMesh.uv = uv;
+            capeMesh.SetTriangles(tris, 0);
+            capeMesh.RecalculateNormals();
+            var lit = Shader.Find("Universal Render Pipeline/Lit");
+            var mat = new Material(lit) { name = "Cape" };
+            mat.SetColor("_BaseColor", new Color(0.85f, 0.12f, 0.25f));
+            mat.SetFloat("_Smoothness", 0.35f);
+            mat.SetFloat("_Cull", 0f); // both sides
+            go.AddComponent<MeshFilter>().sharedMesh = capeMesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.renderingLayerMask = 1u | FillLayer;
+            go.transform.SetParent(back, true);
+            return go;
+        }
+
+        /// <summary>The cape lifts behind her as she runs and flutters, curling more towards the hem.</summary>
+        void AnimateCape(float dt)
+        {
+            if (cape == null || !cape.activeSelf || capeMesh == null) return;
+            capeLift = Mathf.Lerp(capeLift, Mathf.Clamp01(lastSpeed / 9f), 1f - Mathf.Exp(-4f * dt));
+            float t = Time.time;
+            for (int r = 0; r <= CapeRows; r++)
+            {
+                float v = r / (float)CapeRows;
+                float angle = (6f + capeLift * 38f) * v + Mathf.Sin(t * (5f + capeLift * 6f) - v * 4f) * (2f + capeLift * 7f) * v;
+                var rot = Quaternion.Euler(angle, 0f, 0f); // swings back, away from her
+                for (int c = 0; c <= CapeCols; c++)
+                {
+                    int i = r * (CapeCols + 1) + c;
+                    var b = capeBase[i];
+                    capeVerts[i] = rot * new Vector3(b.x, b.y, b.z) + new Vector3(0f, 0f, -Mathf.Sin(t * 7f + c) * 0.01f * capeLift * v);
+                }
+            }
+            capeMesh.vertices = capeVerts;
+            capeMesh.RecalculateNormals();
+            capeMesh.RecalculateBounds();
+        }
+
+        static Vector4 PixelRect(float x0, float y0, float x1, float y1) =>
+            new Vector4(x0 / 2048f, 1f - y1 / 2048f, x1 / 2048f, 1f - y0 / 2048f);
+
+        // ---------- face ----------
+
+        public enum Face { Normal, Blink, Happy, Hurt, Surprised }
+
+        readonly System.Collections.Generic.List<Renderer> faceRenderers = new System.Collections.Generic.List<Renderer>();
+        MaterialPropertyBlock faceBlock; // created on first use: Unity forbids it in field initialisers
+        Face face, held;
+        float heldUntil, nextBlink = 2f, blinkUntil;
+        bool faceDirty = true;
+
+        /// <summary>Shows an expression for a while (joy, pain...); blinking and surprise take over again after it.</summary>
+        public void Express(Face f, float seconds)
+        {
+            held = f;
+            heldUntil = Time.time + seconds;
+        }
+
+        void UpdateFace(bool grounded, float verticalSpeed)
+        {
+            var f = Face.Normal;
+            if (Time.time < heldUntil) f = held;
+            else if (!grounded && !Swimming && verticalSpeed < -12f && airTime > 0.6f) f = Face.Surprised; // a long fall
+            else
+            {
+                if (Time.time > nextBlink)
+                {
+                    blinkUntil = Time.time + 0.13f;
+                    nextBlink = Time.time + UnityEngine.Random.Range(2f, 5f);
+                }
+                if (Time.time < blinkUntil) f = Face.Blink;
+            }
+            if (f == face && !faceDirty) return;
+            face = f;
+            faceDirty = false;
+            if (faceBlock == null) faceBlock = new MaterialPropertyBlock();
+            foreach (var r in faceRenderers)
+            {
+                if (r == null) continue;
+                r.GetPropertyBlock(faceBlock);
+                faceBlock.SetFloat("_FaceIndex", (int)f);
+                r.SetPropertyBlock(faceBlock);
             }
         }
 

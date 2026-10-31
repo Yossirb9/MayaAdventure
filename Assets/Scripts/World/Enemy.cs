@@ -14,8 +14,20 @@ namespace MayaAdventure
     {
         public static readonly List<Enemy> All = new List<Enemy>();
 
+        /// <summary>The boss Maya is fighting right now (the HUD shows its name and health bar).</summary>
+        public static Enemy Boss { get; protected set; }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics() => All.Clear();
+        static void ResetStatics()
+        {
+            All.Clear();
+            Boss = null;
+        }
+
+        /// <summary>Bosses: name and health for the HUD bar (others have none).</summary>
+        public virtual string BossName => null;
+        public virtual int BossHp => 0;
+        public virtual int BossMaxHp => 0;
 
         public bool Dead { get; protected set; }
         /// <summary>Horizontal radius and height of the body, measured from <see cref="Origin"/>.</summary>
@@ -97,7 +109,12 @@ namespace MayaAdventure
             }
             if (p.Velocity.y < -0.5f && rel.y > bodyHeight * 0.45f)
             {
-                if (Hit(HitKind.Stomp, p.transform.position)) p.Bounce(Controls.JumpHeld ? 14f : 10f);
+                if (Hit(HitKind.Stomp, p.transform.position))
+                {
+                    p.Bounce(Controls.JumpHeld ? 14f : 10f);
+                    ThirdPersonCamera.Shake(0.12f);
+                    gm.Sfx.Say(gm.Sfx.SayHop, 0.4f);
+                }
                 else
                 {
                     p.Bounce(8f);

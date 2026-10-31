@@ -106,9 +106,9 @@ namespace MayaAdventure
                 case AmbienceKind.Fireflies:
                     shape.scale = new Vector3(44f, 6f, 44f);
                     heightOffset = 0f;
-                    emission.rateOverTime = 30f;
+                    emission.rateOverTime = 60f;
                     main.startLifetime = 8f;
-                    main.startSize = new ParticleSystem.MinMaxCurve(0.12f, 0.22f);
+                    main.startSize = new ParticleSystem.MinMaxCurve(0.14f, 0.28f);
                     main.startColor = new Color(1f, 0.85f, 0.35f, 1f) * 3f;
                     noise.enabled = true;
                     noise.strength = 0.8f;
@@ -119,8 +119,71 @@ namespace MayaAdventure
             ps.Play();
         }
 
+        // ---------- underwater light shafts ----------
+
+        Transform rays;
+        Material rayMat;
+
+        void BuildRays()
+        {
+            rays = new GameObject("LightShafts").transform;
+            var tex = new Texture2D(32, 128, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < 128; y++)
+            for (int x = 0; x < 32; x++)
+            {
+                float across = 1f - Mathf.Abs((x + 0.5f) / 16f - 1f);
+                float down = (y + 0.5f) / 128f; // 1 at the top (the surface)
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.SmoothStep(0f, 1f, across) * down * down));
+            }
+            tex.Apply();
+            rayMat = Art.Particle(tex, true);
+            if (rayMat == null) return;
+            rayMat.color = new Color(0.55f, 0.85f, 1f, 0.22f);
+            var quad = new Mesh();
+            quad.vertices = new[] { new Vector3(-0.5f, -1f, 0f), new Vector3(0.5f, -1f, 0f), new Vector3(-0.5f, 0f, 0f), new Vector3(0.5f, 0f, 0f) };
+            quad.uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) };
+            quad.triangles = new[] { 0, 2, 1, 1, 2, 3 };
+            quad.RecalculateBounds();
+            var rng = new System.Random(7);
+            for (int i = 0; i < 14; i++)
+            {
+                var ray = Art.MeshObject("Shaft", quad, rays, new Vector3((float)rng.NextDouble() * 30f - 15f, 0f, (float)rng.NextDouble() * 30f - 15f),
+                                         new Vector3(1.2f + (float)rng.NextDouble() * 2.5f, 9f + (float)rng.NextDouble() * 6f, 1f), rayMat);
+                var r = ray.GetComponent<MeshRenderer>();
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+            }
+            rays.gameObject.SetActive(false);
+        }
+
+        void UpdateRays()
+        {
+            var gm = GameManager.I;
+            bool under = gm != null && gm.CameraUnderwater && !float.IsInfinity(gm.WaterY);
+            if (rays == null)
+            {
+                if (!under) return;
+                BuildRays();
+                if (rays == null) return;
+            }
+            rays.gameObject.SetActive(under);
+            if (!under) return;
+            rays.position = new Vector3(cam.position.x, gm.WaterY, cam.position.z);
+            float t = Time.time;
+            int i = 0;
+            foreach (Transform shaft in rays)
+            {
+                // Face the camera around the vertical axis and sway slowly, like light through waves.
+                var to = cam.position - shaft.position;
+                to.y = 0f;
+                if (to.sqrMagnitude > 0.01f) shaft.rotation = Quaternion.LookRotation(-to) * Quaternion.Euler(0f, 0f, Mathf.Sin(t * 0.5f + i) * 6f);
+                i++;
+            }
+        }
+
         void LateUpdate()
         {
+            if (cam != null) UpdateRays();
             if (cam == null || kind == AmbienceKind.None) return;
             var f = cam.forward;
             f.y = 0f;

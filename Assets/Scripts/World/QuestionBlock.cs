@@ -10,6 +10,24 @@ namespace MayaAdventure
         GameObject model;
         Vector3 basePos;
         float bumpTime = -1f;
+        string key;
+
+        void Start()
+        {
+            key = GameManager.KeyFor("qblock", basePos);
+            if (GameManager.I != null && GameManager.I.Taken(key)) MarkUsed();
+        }
+
+        void MarkUsed()
+        {
+            used = true;
+            if (model != null)
+            {
+                Destroy(model);
+                model = Props.Spawn("crate", transform, new Vector3(0f, -0.5f, 0f), 2f);
+            }
+            else rend.sharedMaterial = Art.Textured("usedblock", Vector2.one, 0.1f);
+        }
 
         public static QuestionBlock Build(Transform parent, Vector3 center)
         {
@@ -38,16 +56,11 @@ namespace MayaAdventure
         public void Hit()
         {
             if (used) return;
-            used = true;
-            if (model != null)
-            {
-                Destroy(model);
-                model = Props.Spawn("crate", transform, new Vector3(0f, -0.5f, 0f), 2f);
-            }
-            else rend.sharedMaterial = Art.Textured("usedblock", Vector2.one, 0.1f);
+            MarkUsed();
             bumpTime = 0f;
             var gm = GameManager.I;
             if (gm == null) return;
+            gm.Take(key);
             gm.Sfx.Play(gm.Sfx.Block);
             CoinPop.Spawn(transform.position + Vector3.up * 0.8f);
             gm.CollectCoin(false, transform.position);

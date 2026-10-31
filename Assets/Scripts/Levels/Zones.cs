@@ -192,12 +192,9 @@ namespace MayaAdventure
 
             // Star 5: a cannon to a hidden island where snappers guard the star.
             var land = CannonTo(new Vector3(-4f, sea + 1f, -28f), new Vector3(-46f, 0f, -46f), 9f, 6f, tile, sand, new Vector3(-6f, sea + 1f, -21f), 2f);
-            var star = PowerStar.Build(root, land + Vector3.up * 1.8f, "אי הצמחים הטורפים", true);
-            RevealWhenCleared.Watch(root, star, "כל הצמחים הובסו - כוכב הופיע!",
-                Snapper.Build(root, land + new Vector3(-5.5f, 0f, 0.5f)),
-                Snapper.Build(root, land + new Vector3(-4f, 0f, 4f), 90f),
-                Snapper.Build(root, land + new Vector3(0.5f, 0f, -6f), 180f),
-                Snapper.Build(root, land + new Vector3(5f, 0f, -4f), 30f));
+            // The giant Octopus has taken over the hidden island.
+            var star = PowerStar.Build(root, land + Vector3.up * 1.8f, "התמנון הענק", true);
+            GiantBoss.Build(root, land, GiantBoss.Kind.Octopus, star);
             Sign.Build(root, land + new Vector3(-2f, 0f, 5.5f), 180f, $"צמחים טורפים! אי אפשר לקפוץ עליהם - {PunchKey} או הלמות לידם");
             PalmTree(land + new Vector3(6f, 0f, 0f));
             Heart.Build(root, land + new Vector3(1.5f, 1f, 5f));

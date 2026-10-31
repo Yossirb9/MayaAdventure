@@ -45,6 +45,9 @@ namespace MayaAdventure
         public PostFX Post { get; private set; }
 
         readonly HashSet<string> collected = new HashSet<string>();
+        // This session's memory of each world: coins, red coins, chests, blocks and crates already used, so a world
+        // doesn't refill behind Maya's back when she leaves and comes back.
+        readonly HashSet<string> taken = new HashSet<string>();
         LevelInfo level;
         int devStar = -1;
         Vector3 checkpoint;
@@ -122,6 +125,11 @@ namespace MayaAdventure
             // mid-game: on Android it resets the graphics surface and broke all text.)
             int q = Mathf.Clamp(GameSettings.Quality, 0, QualitySettings.names.Length - 1);
             if (QualitySettings.GetQualityLevel() != q) QualitySettings.SetQualityLevel(q, true);
+            var camera = Cam.GetComponent<Camera>();
+            var cull = new float[32];
+            cull[DetailLayer] = DetailDistance[q];
+            camera.layerCullDistances = cull;
+            camera.layerCullSpherical = true;
         }
 
         void SpawnPlayerAndCamera()
@@ -258,9 +266,26 @@ namespace MayaAdventure
             level = Levels.Build(LevelIndex);
             RedCoins = 0;
             redStarRevealed = false;
+            string redPrefix = LevelIndex + ":red:";
+            foreach (var key in taken)
+                if (key.StartsWith(redPrefix)) RedCoins++;
+            if (level.RedCoinStar != null && TotalRedCoins > 0 && RedCoins >= TotalRedCoins)
+            {
+                redStarRevealed = true;
+                level.RedCoinStar.gameObject.SetActive(true);
+            }
+            MarkDetails(level.Root);
+            Npc.ForLevel(LevelIndex, level);
+            UpdateMission();
             ApplyTheme(level.Theme);
+            Sfx.SetWorld(LevelIndex);
             ambience.Set(level.Ambience);
-            PlayerPrefs.SetInt(LevelKey, LevelIndex);
+            if (State != GameState.Title)
+            {
+                // Remember where Maya is (the title screen's backdrop world doesn't count).
+                savedLevel = LevelIndex;
+                PlayerPrefs.SetInt(LevelKey, LevelIndex);
+            }
             checkpoint = returning ? level.ReturnSpawn : level.Start;
             checkpointYaw = returning ? level.ReturnYaw : level.StartYaw;
             Physics.SyncTransforms(); // the new world's colliders must exist before Maya lands on them
@@ -304,10 +329,68 @@ namespace MayaAdventure
             BuildLevel(index, returning);
             Hud.Fade(0f, 0.6f);
             Hud.ShowTitle(level.Name, 3f);
+            if (Mission != null) Hud.Mission(Mission.Title, 5f);
             loading = false;
         }
 
         public bool HasStar(string id) => collected.Contains(id);
+
+        /// <summary>This world's stars, in order.</summary>
+        public System.Collections.Generic.List<PowerStar> LevelStarsList()
+        {
+            var list = new System.Collections.Generic.List<PowerStar>();
+            if (level != null) list.AddRange(level.Root.GetComponentsInChildren<PowerStar>(true));
+            list.Sort((a, b) => a.Id.Length != b.Id.Length ? a.Id.Length - b.Id.Length : string.CompareOrdinal(a.Id, b.Id));
+            return list;
+        }
+
+        /// <summary>The world's next star to get (its name is the mission), or null when all are collected.</summary>
+        public PowerStar Mission { get; private set; }
+
+        /// <summary>Picks the first star of this world not collected yet and lights its beacon.</summary>
+        public void UpdateMission()
+        {
+            if (level == null) return;
+            PowerStar best = null;
+            foreach (var s in LevelStarsList())
+            {
+                s.SetBeacon(false);
+                if (best == null && !s.AlreadyCollected && !HasStar(s.Id) && s.gameObject.activeInHierarchy) best = s;
+            }
+            Mission = best;
+            if (best != null) best.SetBeacon(true);
+        }
+
+        /// <summary>Layer of small decorations (flowers, grass, pebbles) that the camera stops drawing beyond a distance.</summary>
+        public const int DetailLayer = 3;
+        static readonly float[] DetailDistance = { 35f, 55f, 90f };
+
+        /// <summary>Puts small, purely decorative renderers on <see cref="DetailLayer"/> (no shadows on lower qualities).</summary>
+        static void MarkDetails(Transform root)
+        {
+            bool shadows = GameSettings.Quality >= 2;
+            foreach (var r in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r is ParticleSystemRenderer || r.gameObject.layer != 0) continue;
+                var size = r.bounds.size;
+                if (Mathf.Max(size.x, Mathf.Max(size.y, size.z)) > 1.6f) continue;
+                if (r.GetComponentInParent<Collider>() != null || r.GetComponentInParent<MonoBehaviour>() != null) continue;
+                r.gameObject.layer = DetailLayer;
+                if (!shadows) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+        }
+
+        /// <summary>Id of a world object for <see cref="Taken"/>: its kind and where it was built, in the current world.</summary>
+        public static string KeyFor(string kind, Vector3 position) =>
+            I == null ? null : $"{I.LevelIndex}:{kind}:{Mathf.RoundToInt(position.x * 4f)},{Mathf.RoundToInt(position.y * 4f)},{Mathf.RoundToInt(position.z * 4f)}";
+
+        /// <summary>Was this coin / chest / block already used earlier in this session?</summary>
+        public bool Taken(string key) => key != null && taken.Contains(key);
+
+        public void Take(string key)
+        {
+            if (key != null) taken.Add(key);
+        }
 
         void LoadProgress()
         {
@@ -490,6 +573,7 @@ namespace MayaAdventure
             Cam.Snap();
             Hud.OnGameStarted();
             Hud.ShowTitle(level.Name, 3f);
+            if (Mission != null) Hud.Mission(Mission.Title, 5f);
         }
 
         public void Resume() => SetPaused(false);
@@ -509,6 +593,24 @@ namespace MayaAdventure
             savedLevel = LevelIndex;
             LockCursor(false);
             PlayerPrefs.Save();
+        }
+
+        IEnumerator NextMissionSoon()
+        {
+            yield return null; // the collected star is gone by now
+            UpdateMission();
+            if (Mission != null) Hud.Mission(Mission.Title, 4f);
+        }
+
+        /// <summary>Slows the world down for a dramatic moment (real seconds), then back to normal speed.</summary>
+        public void SlowMotion(float scale, float seconds) => StartCoroutine(SlowMotionRoutine(scale, seconds));
+
+        IEnumerator SlowMotionRoutine(float scale, float seconds)
+        {
+            Time.timeScale = scale;
+            yield return new WaitForSecondsRealtime(seconds);
+            // Don't undo a pause that started meanwhile.
+            if (State != GameState.Paused && Mathf.Approximately(Time.timeScale, scale)) Time.timeScale = 1f;
         }
 
         void SetPaused(bool paused)
@@ -551,7 +653,10 @@ namespace MayaAdventure
         {
             Time.timeScale = 1f;
             collected.Clear();
+            taken.Clear();
             SaveProgress();
+            savedLevel = 0;
+            PlayerPrefs.SetInt(LevelKey, 0);
             ResetRun();
             BuildLevel(0, false);
             StartPlaying();
@@ -568,6 +673,7 @@ namespace MayaAdventure
 
         void AddCoin()
         {
+            Outfits.AddCoins(1);
             Coins++;
             Health = Mathf.Min(MaxHealth, Health + 1);
             if (Coins >= nextLifeAt)
@@ -594,6 +700,7 @@ namespace MayaAdventure
 
         public void CollectCoin(bool red, Vector3 position)
         {
+            Outfits.AddCoins(1);
             Coins++;
             Health = Mathf.Min(MaxHealth, Health + 1);
             if (red)
@@ -637,6 +744,11 @@ namespace MayaAdventure
             collected.Add(star.Id);
             SaveProgress();
             Player.Celebrate();
+            Cam.CelebrateShot(1.8f);
+            StartCoroutine(NextMissionSoon());
+            Debris.Burst(star.transform.position, new Color(1f, 0.9f, 0.35f), 30, 7f);
+            Haptics.Pulse(60);
+            Sfx.Say(Sfx.SayYesh);
             Hud.Show($"{star.Title} - כוכב {Stars}/{TotalStars}!", 3.5f);
             if (Stars >= TotalStars) StartCoroutine(WinAfterDelay());
         }
@@ -654,6 +766,7 @@ namespace MayaAdventure
             if (Player.Invulnerable || State != GameState.Playing || Player.Power == PowerKind.Metal || ScriptedInput.Active) return;
             Health -= amount;
             Sfx.Play(Sfx.Hurt);
+            Sfx.Say(Sfx.SayOuch);
             Player.Knockback(source);
             if (Health <= 0) LoseLife();
         }
@@ -708,6 +821,7 @@ namespace MayaAdventure
         public void PoundShock(Vector3 position)
         {
             Sfx.Play(Sfx.Pound);
+            ThirdPersonCamera.Shake(0.16f);
             Debris.Burst(position + Vector3.up * 0.1f, new Color(1f, 0.9f, 0.6f), 8, 4f);
             Debris.Dust(position, 14, 1.6f);
             foreach (var e in Enemy.All.ToArray())

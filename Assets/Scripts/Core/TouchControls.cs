@@ -51,13 +51,16 @@ namespace MayaAdventure
 
         // Layout in screen pixels (origin bottom-left, like Input.touches).
         float S => Screen.height / 1080f;
-        Vector2 APos => new Vector2(Screen.width - 175f * S, 200f * S);
-        Vector2 BPos => new Vector2(Screen.width - 385f * S, 120f * S);
+        // Button size and side come from the settings (left-handed: buttons on the left, stick on the right).
+        float K => GameSettings.ButtonScales[GameSettings.ButtonSize];
+        float Side(float fromRight) => GameSettings.LeftHanded ? fromRight : Screen.width - fromRight;
+        Vector2 APos => new Vector2(Side(175f * S * K), 200f * S * K);
+        Vector2 BPos => new Vector2(Side(385f * S * K), 120f * S * K);
         Vector2 PausePos => new Vector2(Screen.width * 0.5f, Screen.height - 70f * S);
         Vector2 RespawnPos => new Vector2(Screen.width * 0.5f - 300f * S, 170f * S);
         Vector2 NewGamePos => new Vector2(Screen.width * 0.5f + 300f * S, 170f * S);
-        float ARadius => 105f * S;
-        float BRadius => 88f * S;
+        float ARadius => 105f * S * K;
+        float BRadius => 88f * S * K;
         float StickRadius => 120f * S;
 
         bool Inside(Vector2 p, Vector2 c, float r) => (p - c).sqrMagnitude < r * r * 1.3f;
@@ -82,7 +85,8 @@ namespace MayaAdventure
                         if (Inside(p, PausePos, 60f * S)) { PauseTap = true; break; }
                         if (Inside(p, APos, ARadius)) { aFinger = t.fingerId; ADown = true; break; }
                         if (Inside(p, BPos, BRadius)) { bFinger = t.fingerId; BDown = true; break; }
-                        if (p.x < Screen.width * 0.45f && stickFinger == None)
+                        bool stickSide = GameSettings.LeftHanded ? p.x > Screen.width * 0.55f : p.x < Screen.width * 0.45f;
+                        if (stickSide && stickFinger == None)
                         {
                             stickFinger = t.fingerId;
                             stickOrigin = p;
@@ -202,7 +206,7 @@ namespace MayaAdventure
             }
             else
             {
-                var hint = new Vector2(260f * s, 230f * s);
+                var hint = new Vector2(GameSettings.LeftHanded ? Screen.width - 260f * s : 260f * s, 230f * s);
                 Circle(hint, StickRadius, new Color(1f, 1f, 1f, 0.08f), null, 0);
                 Circle(hint, 55f * s, new Color(1f, 1f, 1f, 0.3f), null, 0);
             }

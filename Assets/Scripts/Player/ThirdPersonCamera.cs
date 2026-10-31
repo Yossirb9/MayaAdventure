@@ -10,7 +10,21 @@ namespace MayaAdventure
         public float distance = 7.5f, minDistance = 3f, maxDistance = 13f;
         public float minPitch = -5f, maxPitch = 65f;
 
-        float yaw, pitch = 18f, currentDistance, idleLook;
+        float yaw, pitch = 18f, currentDistance, idleLook, celebrateUntil;
+        static float shake;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics() => shake = 0f;
+
+        /// <summary>A short camera shake (stomps, ground pounds, the king's slam). Strength in metres.</summary>
+        public static void Shake(float amount)
+        {
+            if (GameSettings.Vibration) Haptics.Pulse(amount > 0.25f ? 45 : 25);
+            shake = Mathf.Max(shake, amount);
+        }
+
+        /// <summary>Swing round to look Maya in the face for a moment (she just got a star).</summary>
+        public void CelebrateShot(float seconds) => celebrateUntil = Time.time + seconds;
         Vector3 focus;
         const int Mask = ~(1 << 2); // everything but Ignore Raycast (Maya); also sees the tree-crown blockers on layer 1
 
@@ -49,19 +63,30 @@ namespace MayaAdventure
                 distance = Mathf.Clamp(distance - Controls.Zoom * 1.2f, minDistance, maxDistance);
                 idleLook = look.sqrMagnitude > 0.01f ? 0f : idleLook + dt;
 
-                // Gently swing behind Maya while she runs, if the player isn't steering the camera.
+                // Swing behind Maya while she runs, if the player isn't steering the camera (sooner and faster on
+                // a phone, where turning the camera by hand is harder), and settle back to a comfortable height.
                 var maya = Target.GetComponent<MayaController>();
-                if (idleLook > 1.2f && maya != null && maya.Grounded &&
+                bool touch = TouchControls.Active;
+                if (idleLook > (touch ? 0.6f : 1.2f) && maya != null && (maya.Grounded || touch) &&
                     new Vector2(maya.Velocity.x, maya.Velocity.z).sqrMagnitude > 4f)
                 {
                     float behind = Target.eulerAngles.y;
-                    if (Mathf.Abs(Mathf.DeltaAngle(yaw, behind)) < 100f)
-                        yaw = Mathf.MoveTowardsAngle(yaw, behind, 35f * dt);
+                    if (Mathf.Abs(Mathf.DeltaAngle(yaw, behind)) < (touch ? 135f : 100f))
+                        yaw = Mathf.MoveTowardsAngle(yaw, behind, (touch ? 70f : 35f) * dt);
                 }
+                if (touch && idleLook > 2f) pitch = Mathf.MoveTowards(pitch, 16f, 10f * dt);
             }
             else
             {
                 yaw += 8f * dt; // slow showcase orbit on menus
+            }
+            float dist = distance;
+            if (Time.time < celebrateUntil)
+            {
+                // In front of her, a little lower and closer, while she dances.
+                yaw = Mathf.MoveTowardsAngle(yaw, Target.eulerAngles.y + 180f, 260f * dt);
+                pitch = Mathf.MoveTowards(pitch, 6f, 40f * dt);
+                dist = Mathf.Min(distance, 4.2f);
             }
             pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
 
@@ -72,8 +97,8 @@ namespace MayaAdventure
 
             var rot = Quaternion.Euler(pitch, yaw, 0f);
             Vector3 dir = rot * Vector3.back;
-            float d = distance;
-            if (Physics.SphereCast(focus, 0.3f, dir, out var hit, distance, Mask, QueryTriggerInteraction.Collide))
+            float d = dist;
+            if (Physics.SphereCast(focus, 0.3f, dir, out var hit, dist, Mask, QueryTriggerInteraction.Collide))
                 d = Mathf.Max(0.8f, hit.distance - 0.1f);
             currentDistance = d < currentDistance ? d : Mathf.Lerp(currentDistance, d, 1f - Mathf.Exp(-4f * dt));
 
@@ -81,6 +106,11 @@ namespace MayaAdventure
             // Never dip into the ground.
             if (Physics.Raycast(camPos + Vector3.up * 3f, Vector3.down, out var floor, 3.6f, Mask, QueryTriggerInteraction.Ignore))
                 camPos.y = Mathf.Max(camPos.y, floor.point.y + 0.6f);
+            if (shake > 0f)
+            {
+                camPos += Random.insideUnitSphere * shake;
+                shake = Mathf.MoveTowards(shake, 0f, dt * 2.5f);
+            }
             transform.position = camPos;
             transform.rotation = Quaternion.LookRotation(focus - camPos, Vector3.up);
         }

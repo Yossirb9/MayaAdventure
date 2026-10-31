@@ -173,7 +173,13 @@ namespace MayaAdventure.EditorTools
                 gm.CollectStar(first);
                 Coin red = null;
                 foreach (var c in Object.FindObjectsByType<Coin>(FindObjectsSortMode.None)) if (c.Red) { red = c; break; }
-                if (red != null) { gm.CollectCoin(true, red.transform.position); Object.Destroy(red.gameObject); }
+                if (red != null)
+                {
+                    // Touch it like a player would, so it is remembered for this session.
+                    gm.Player.Teleport(red.transform.position - Vector3.up * 0.85f, 0f, false);
+                    yield return 0.3f;
+                    gm.Player.Teleport(gm.Player.transform.position + Vector3.up * 0.2f, 0f, false);
+                }
                 int coins = gm.Coins, starsBefore = gm.Stars, redBefore = gm.RedCoins, lives = gm.Lives;
                 int coinObjs = Object.FindObjectsByType<Coin>(FindObjectsSortMode.None).Length;
                 yield return 0.5f;
@@ -185,7 +191,9 @@ namespace MayaAdventure.EditorTools
                 foreach (var st in Object.FindObjectsByType<PowerStar>(FindObjectsInactive.Include, FindObjectsSortMode.None)) if (st.Id == id) again = st;
                 Log($"travel 0->1->0: stars {starsBefore}->{gm.Stars}, coins {coins}->{gm.Coins}, lives {lives}->{gm.Lives}, red {redBefore}->{gm.RedCoins}, " +
                     $"coin objects {coinObjs}->{Object.FindObjectsByType<Coin>(FindObjectsSortMode.None).Length}, star {id} ghost={(again != null && again.AlreadyCollected)}, saved='{PlayerPrefs.GetString("maya_stars_v1")}'");
-                if (gm.Stars != starsBefore || again == null || !again.AlreadyCollected) { errors++; Log("PROGRESS LOST after travelling"); }
+                if (gm.Stars != starsBefore || again == null || !again.AlreadyCollected || gm.RedCoins != redBefore || gm.Coins != coins ||
+                    Object.FindObjectsByType<Coin>(FindObjectsSortMode.None).Length != coinObjs)
+                { errors++; Log("PROGRESS LOST after travelling"); }
             }
 
             for (int k = 0; k < Levels.Count; k++)
@@ -196,6 +204,7 @@ namespace MayaAdventure.EditorTools
                 Shot($"L{k + 1}_view");
                 Shot($"L{k + 1}_aerial", info.Start + new Vector3(0f, 22f, -30f), info.Start + new Vector3(0f, 0f, 14f));
                 var stars = info.Root.GetComponentsInChildren<PowerStar>(true);
+                Log($"music {(gm.Sfx.MusicClip != null ? gm.Sfx.MusicClip.name + " " + gm.Sfx.MusicClip.length.ToString("F1") + "s" : "none")}, voice {(gm.Sfx.SayYesh != null && gm.Sfx.SayWow != null && gm.Sfx.SayOuch != null && gm.Sfx.SayYay != null && gm.Sfx.SayHop != null)}, mission {(gm.Mission != null ? gm.Mission.Title : "-")}, guide {Object.FindAnyObjectByType<Npc>() != null}");
                 Log($"\n== Level {k + 1} {info.Name}: stars={stars.Length} (expected {Levels.StarCounts[k]}) enemies={Enemy.All.Count} punchables={Punchable.All.Count} " +
                     $"pound={PoundTarget.All.Count} cannons={Object.FindObjectsByType<Cannon>(FindObjectsSortMode.None).Length} pipes={Object.FindObjectsByType<WarpPipe>(FindObjectsSortMode.None).Length} state={gm.State}");
                 if (stars.Length != Levels.StarCounts[k]) { errors++; Log("STAR COUNT MISMATCH"); }
@@ -245,6 +254,66 @@ namespace MayaAdventure.EditorTools
                     var f = gm.Player.transform.forward;
                     var r = gm.Player.transform.right;
                     Shot("maya_front", mp + f * 2.6f + Vector3.up * 1.3f, mp + Vector3.up * 1f);
+                    var faceModel = gm.Player.GetComponentInChildren<MayaModel>();
+                    foreach (MayaModel.Face face in System.Enum.GetValues(typeof(MayaModel.Face)))
+                    {
+                        faceModel.Express(face, 5f);
+                        yield return 0.15f;
+                        Shot($"face_{face}", gm.Player.transform.position + gm.Player.transform.forward * 1.2f + Vector3.up * 1.45f,
+                             gm.Player.transform.position + Vector3.up * 1.38f);
+                    }
+                    faceModel.Express(MayaModel.Face.Normal, 0f);
+                    // New pickup models side by side.
+                    {
+                        var show = new GameObject("Showcase").transform;
+                        var fwd = gm.Player.transform.forward;
+                        var side = gm.Player.transform.right;
+                        var sp = gm.Player.transform.position + fwd * 4f + Vector3.up * 0.4f;
+                        OneUp.Build(show, sp - side * 1.4f).enabled = false;
+                        PowerCap.Build(show, sp + Vector3.up * 0.6f, PowerKind.Wing).enabled = false;
+                        PowerCap.Build(show, sp + side * 1.4f + Vector3.up * 0.6f, PowerKind.Metal).enabled = false;
+                        yield return 0.2f;
+                        Shot("models", sp + Vector3.up * 1.2f - fwd * 3.2f, sp + Vector3.up * 0.5f);
+                        Object.Destroy(show.gameObject);
+                    }
+                    // Wardrobe: buy and wear everything, look at her front and back while she runs.
+                    {
+                        Outfits.AddCoins(400);
+                        foreach (var it in Outfits.Items) if (!Outfits.Owns(it.Id)) Outfits.Buy(it.Id);
+                        Outfits.Wear("jacket_purple", true);
+                        Outfits.Wear("crown", true);
+                        Outfits.Wear("cape", true);
+                        yield return 0.3f;
+                        var pp = gm.Player.transform.position;
+                        var pf = gm.Player.transform.forward;
+                        Shot("outfit_front", pp + pf * 2.6f + Vector3.up * 1.3f, pp + Vector3.up * 1f);
+                        ScriptedInput.Active = true;
+                        ScriptedInput.WorldMove = pf;
+                        yield return 0.8f;
+                        ScriptedInput.WorldMove = Vector3.zero;
+                        ScriptedInput.Active = false;
+                        pp = gm.Player.transform.position;
+                        pf = gm.Player.transform.forward;
+                        Shot("outfit_back", pp - pf * 2.8f + Vector3.up * 1.5f, pp + Vector3.up * 1f);
+                        Log($"wallet {Outfits.Wallet}, wears crown={Outfits.Wears("crown")} cape={Outfits.Wears("cape")} jacket={Outfits.JacketTint}");
+                        foreach (var it in Outfits.Items) Outfits.Wear(it.Id, false);
+                    }
+                    // A guide talks when Maya walks up; the mission star has its beacon.
+                    {
+                        var npc = Object.FindAnyObjectByType<Npc>();
+                        if (npc == null) { errors++; Log("NO GUIDE in world 1"); }
+                        else
+                        {
+                            gm.Player.Teleport(npc.transform.position + npc.transform.forward * 2f, npc.transform.eulerAngles.y + 180f, false);
+                            gm.Cam.Snap();
+                            yield return 1f;
+                            Shot("npc");
+                        }
+                        Log($"mission: {(gm.Mission != null ? gm.Mission.Title + " " + gm.Mission.Id : "none")}");
+                        gm.Hud.Mission(gm.Mission != null ? gm.Mission.Title : "-", 3f);
+                        yield return 0.6f;
+                        Shot("mission");
+                    }
                     for (int i = 0; i < 3; i++)
                     {
                         // Force the combo step so each shot shows punch, punch, kick regardless of frame timing.
@@ -289,6 +358,14 @@ namespace MayaAdventure.EditorTools
                 foreach (var c in Punchable.All.ToArray()) c.OnPunched(c.transform.position + Vector3.back);
                 yield return 1f;
                 int defeated = 0;
+                foreach (var e in Enemy.All.ToArray())
+                    if (e != null && e.BossMaxHp > 0)
+                    {
+                        var kp = e.transform.position;
+                        var kf = e.transform.forward;
+                        Shot($"boss_L{k + 1}", kp + kf * 7.5f + new Vector3(0f, 3.5f, 0f), kp + Vector3.up * 1.8f);
+                        Log($"boss {e.BossName} hp {e.BossHp}/{e.BossMaxHp}");
+                    }
                 foreach (var e in Enemy.All.ToArray())
                 {
                     if (e == null) continue;

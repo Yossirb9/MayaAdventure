@@ -10,6 +10,19 @@ namespace MayaAdventure
         CrateContents contents;
         int amount;
         bool broken;
+        string key;
+
+        void Start()
+        {
+            // Broken earlier this session: no crate, but whatever was inside and not picked up is still lying there.
+            key = GameManager.KeyFor("crate", transform.position);
+            if (GameManager.I != null && GameManager.I.Taken(key))
+            {
+                broken = true;
+                SpawnContents();
+                Destroy(gameObject);
+            }
+        }
 
         public static Crate Build(Transform parent, Vector3 position, CrateContents contents = CrateContents.Coins, int amount = 3, float yaw = 0f)
         {
@@ -38,7 +51,17 @@ namespace MayaAdventure
             var gm = GameManager.I;
             Vector3 c = PunchPoint;
             Debris.Burst(c, new Color(0.8f, 0.55f, 0.3f), 14, 5f);
-            if (gm != null) gm.Sfx.Play(gm.Sfx.Stomp, 0.8f);
+            if (gm != null)
+            {
+                gm.Sfx.Play(gm.Sfx.Stomp, 0.8f);
+                gm.Take(key);
+            }
+            SpawnContents();
+            Destroy(gameObject);
+        }
+
+        void SpawnContents()
+        {
             var parent = transform.parent;
             var p = transform.localPosition;
             switch (contents)
@@ -62,7 +85,6 @@ namespace MayaAdventure
                     PowerCap.Build(parent, p + Vector3.up * 1.1f, PowerKind.Metal);
                     break;
             }
-            Destroy(gameObject);
         }
     }
 }

@@ -373,7 +373,11 @@ namespace MayaAdventure
             jumpCutAvailable = jumpChain < 2;
             jumpPressedTime = -10f;
             ground = null;
-            if (jumpChain == 2) model.Flip(0.75f);
+            if (jumpChain == 2)
+            {
+                model.Flip(0.75f);
+                GameManager.I?.Sfx.Say(GameManager.I.Sfx.SayWow);
+            }
             GameManager.I?.Sfx.Jump(jumpChain);
         }
 

@@ -41,7 +41,31 @@ namespace MayaAdventure
             BuildKeep();
             Zones.Fortress((n, c, s) => Deck(n, c, s), KenneyGrass);
             CloudSea();
+            DriftingClouds();
             return info;
+        }
+
+        /// <summary>Big soft clouds drifting by far below the platforms (and a few at eye level, far out).</summary>
+        static void DriftingClouds()
+        {
+            var rng = new System.Random(11);
+            string[] kinds = { "Platformer/Cloud_1", "Platformer/Cloud_2", "Platformer/Cloud_3" };
+            for (int i = 0; i < 28; i++)
+            {
+                var prefab = Nature.Load(kinds[i % kinds.Length]);
+                if (prefab == null) return;
+                float a = (float)rng.NextDouble() * Mathf.PI * 2f, r = 25f + (float)rng.NextDouble() * 110f;
+                bool low = i < 22;
+                var p = new Vector3(Mathf.Cos(a) * r, low ? -10f - (float)rng.NextDouble() * 18f : 4f + (float)rng.NextDouble() * 10f, Mathf.Sin(a) * r);
+                if (!low && r < 70f) p = p.normalized * 90f + Vector3.up * p.y;
+                var cloud = Object.Instantiate(prefab, root, false).transform;
+                cloud.localPosition = p;
+                cloud.localRotation = Quaternion.Euler(0f, (float)rng.NextDouble() * 360f, 0f);
+                cloud.localScale = Vector3.one * (6f + (float)rng.NextDouble() * 9f);
+                foreach (var col in cloud.GetComponentsInChildren<Collider>()) Object.Destroy(col);
+                foreach (var rend in cloud.GetComponentsInChildren<Renderer>()) rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                cloud.gameObject.AddComponent<CloudDrift>().Speed = 0.6f + (float)rng.NextDouble() * 1.2f;
+            }
         }
 
         static GameObject Deck(string name, Vector3 topCenter, Vector3 size)

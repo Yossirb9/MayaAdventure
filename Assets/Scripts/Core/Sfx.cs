@@ -13,6 +13,11 @@ namespace MayaAdventure
         AudioClip[] jumps;
         public AudioClip Coin, RedCoin, Stomp, Hurt, Star, Spring, Splash, Pound, Block, OneUp, Checkpoint, Reveal;
         public AudioClip Swoosh, PowerUp, Boom, Warp, Fuse, Tick;
+        /// <summary>Maya's voice cries (Resources/Voice): yesh, wow, ouch, yay, hop.</summary>
+        public AudioClip SayYesh, SayWow, SayOuch, SayYay, SayHop;
+        float lastSay = -10f;
+        int world = -1;
+        readonly AudioClip[] worldMusic = new AudioClip[5];
 
         void Awake()
         {
@@ -47,9 +52,13 @@ namespace MayaAdventure
             Warp = Sweep("warp", 0.55f, t => Mathf.Lerp(900f, 120f, t / 0.55f) + 60f * Mathf.Sin(t * 90f), Wave.Square, 0.14f);
             Fuse = Sweep("fuse", 0.08f, t => 1400f, Wave.Square, 0.08f);
             Tick = Sweep("tick", 0.05f, t => 2000f, Wave.Triangle, 0.3f);
-            music.clip = BuildMusic();
+            SayYesh = Resources.Load<AudioClip>("Voice/yesh");
+            SayWow = Resources.Load<AudioClip>("Voice/wow");
+            SayOuch = Resources.Load<AudioClip>("Voice/ouch");
+            SayYay = Resources.Load<AudioClip>("Voice/yay");
+            SayHop = Resources.Load<AudioClip>("Voice/hop");
+            SetWorld(0);
             music.mute = !GameSettings.Music;
-            music.Play();
         }
 
         public void SetMusic(bool on)
@@ -70,6 +79,25 @@ namespace MayaAdventure
         }
 
         public void Jump(int chain) => Play(jumps[Mathf.Clamp(chain, 0, 2)], 0.8f);
+
+        /// <summary>Maya says something (never two cries on top of each other).</summary>
+        public void Say(AudioClip clip, float chance = 1f)
+        {
+            if (clip == null || Time.time - lastSay < 0.7f || UnityEngine.Random.value > chance) return;
+            lastSay = Time.time;
+            Play(clip, 0.9f);
+        }
+
+        /// <summary>Each world has its own tune (built the first time Maya visits it).</summary>
+        public void SetWorld(int index)
+        {
+            index = Mathf.Clamp(index, 0, worldMusic.Length - 1);
+            if (index == world && music.isPlaying) return;
+            world = index;
+            if (worldMusic[index] == null) worldMusic[index] = BuildMusic(index);
+            music.clip = worldMusic[index];
+            music.Play();
+        }
 
         // ---------- synthesis ----------
 
@@ -148,9 +176,60 @@ namespace MayaAdventure
             }
         }
 
-        static AudioClip BuildMusic()
+        static AudioClip BuildMusic(int index)
         {
-            // An original cheerful 8-bar loop: melody in eighth notes, bass in quarter notes.
+            switch (index)
+            {
+                case 1: // Snowy Peaks: a gentle bell tune in A minor
+                    return Tune("music_snow", 112f, Wave.Triangle, 0.13f, Wave.Sine, 0.3f, 0.015f, new[]
+                    {
+                        69, 72, 76, 72, 74, 72, 71, 69, 67, 71, 74, 71, 72, 71, 69, 67,
+                        65, 69, 72, 69, 71, 69, 67, 65, 64, 0, 68, 71, 76, 0, 71, 0,
+                        69, 72, 76, 81, 79, 76, 74, 72, 71, 74, 79, 74, 76, 74, 72, 71,
+                        69, 72, 77, 72, 76, 72, 71, 68, 69, 0, 64, 0, 69, 0, 0, 0,
+                    }, new[]
+                    {
+                        45, 52, 45, 52, 43, 50, 43, 50, 41, 48, 41, 48, 40, 47, 40, 47,
+                        45, 52, 45, 52, 43, 50, 43, 50, 41, 48, 40, 47, 45, 52, 45, 0,
+                    });
+                case 2: // Coral Lagoon: a lazy island sway
+                    return Tune("music_lagoon", 96f, Wave.Sine, 0.16f, Wave.Triangle, 0.28f, 0.035f, new[]
+                    {
+                        72, 0, 74, 76, 0, 79, 76, 0, 77, 0, 76, 74, 0, 72, 69, 0,
+                        72, 0, 74, 76, 0, 79, 81, 0, 79, 0, 76, 0, 74, 0, 72, 0,
+                        69, 72, 74, 0, 76, 74, 72, 0, 71, 74, 76, 0, 79, 76, 74, 0,
+                        72, 76, 79, 81, 79, 76, 74, 76, 72, 0, 0, 0, 72, 0, 0, 0,
+                    }, new[]
+                    {
+                        48, 0, 55, 48, 53, 0, 60, 53, 48, 0, 55, 48, 55, 0, 50, 55,
+                        45, 0, 52, 45, 47, 0, 55, 47, 48, 52, 55, 53, 48, 0, 48, 0,
+                    });
+                case 3: // Sky Fortress: a quick heroic march in D major
+                    return Tune("music_sky", 144f, Wave.Square, 0.085f, Wave.Triangle, 0.26f, 0.04f, new[]
+                    {
+                        74, 0, 74, 78, 81, 0, 78, 74, 76, 0, 76, 79, 83, 0, 79, 76,
+                        78, 81, 86, 81, 79, 78, 76, 74, 73, 0, 76, 0, 81, 0, 0, 0,
+                        74, 0, 74, 78, 81, 0, 78, 81, 83, 81, 79, 78, 76, 78, 79, 81,
+                        86, 0, 83, 0, 81, 79, 78, 76, 74, 0, 69, 0, 74, 0, 0, 0,
+                    }, new[]
+                    {
+                        50, 57, 50, 57, 52, 59, 52, 59, 54, 61, 55, 62, 57, 64, 57, 0,
+                        50, 57, 50, 57, 55, 62, 52, 59, 54, 61, 57, 64, 50, 57, 50, 0,
+                    });
+                case 4: // Twilight Woods: a mysterious walk in E minor
+                    return Tune("music_dusk", 104f, Wave.Triangle, 0.13f, Wave.Sine, 0.32f, 0.02f, new[]
+                    {
+                        64, 67, 71, 67, 72, 71, 67, 64, 62, 66, 69, 66, 71, 69, 66, 62,
+                        60, 64, 67, 64, 69, 67, 64, 60, 59, 0, 63, 66, 71, 0, 66, 0,
+                        64, 67, 71, 76, 74, 71, 67, 71, 72, 69, 66, 69, 71, 67, 64, 67,
+                        69, 66, 63, 66, 67, 64, 63, 59, 64, 0, 0, 0, 64, 0, 0, 0,
+                    }, new[]
+                    {
+                        40, 47, 40, 47, 38, 45, 38, 45, 36, 43, 36, 43, 35, 42, 35, 42,
+                        40, 47, 40, 47, 45, 52, 40, 47, 45, 42, 35, 42, 40, 47, 40, 0,
+                    });
+            }
+            // Sunny Island: an original cheerful 8-bar loop.
             int[] melody =
             {
                 72, 76, 79, 76, 77, 76, 74, 72,
@@ -167,20 +246,26 @@ namespace MayaAdventure
                 48, 55, 48, 55, 53, 60, 53, 60, 55, 62, 55, 62, 48, 55, 48, 55,
                 57, 64, 57, 64, 53, 60, 53, 60, 55, 62, 55, 62, 48, 55, 48, 0,
             };
-            float eighth = 60f / 132f / 2f;
+            return Tune("music", 132f, Wave.Square, 0.09f, Wave.Triangle, 0.25f, 0.03f, melody, bass);
+        }
+
+        /// <summary>A looping tune: melody in eighth notes, bass in quarter notes, a soft noise tick on every eighth.</summary>
+        static AudioClip Tune(string name, float bpm, Wave lead, float leadVol, Wave low, float bassVol, float tick, int[] melody, int[] bass)
+        {
+            float eighth = 60f / bpm / 2f;
             var d = new float[Mathf.CeilToInt(melody.Length * eighth * Rate)];
             for (int k = 0; k < melody.Length; k++)
-                if (melody[k] != 0) AddNote(d, k * eighth, eighth * 0.9f, Midi(melody[k]), Wave.Square, 0.09f);
+                if (melody[k] != 0) AddNote(d, k * eighth, eighth * 0.9f, Midi(melody[k]), lead, leadVol);
             for (int k = 0; k < bass.Length; k++)
-                if (bass[k] != 0) AddNote(d, k * 2 * eighth, eighth * 1.8f, Midi(bass[k]), Wave.Triangle, 0.25f);
+                if (bass[k] != 0) AddNote(d, k * 2 * eighth, eighth * 1.8f, Midi(bass[k]), low, bassVol);
             var rng = new System.Random(5);
             for (int k = 0; k < melody.Length; k++)
             {
                 int s0 = (int)(k * eighth * Rate);
                 for (int i = 0; i < 1200 && s0 + i < d.Length; i++)
-                    d[s0 + i] += ((float)rng.NextDouble() * 2f - 1f) * 0.03f * (1f - i / 1200f);
+                    d[s0 + i] += ((float)rng.NextDouble() * 2f - 1f) * tick * (1f - i / 1200f);
             }
-            return Make("music", d);
+            return Make(name, d);
         }
     }
 }

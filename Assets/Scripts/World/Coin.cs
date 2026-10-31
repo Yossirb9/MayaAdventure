@@ -18,6 +18,8 @@ namespace MayaAdventure
             return c;
         }
         Transform spinner;
+        Vector3 home;
+        string key;
 
         public static Coin Build(Transform parent, Vector3 position, bool red = false)
         {
@@ -26,6 +28,7 @@ namespace MayaAdventure
             go.transform.localPosition = position;
             var coin = go.AddComponent<Coin>();
             coin.Red = red;
+            coin.home = go.transform.position;
             coin.spinner = BuildVisual(go.transform, red);
             coin.spinner.localRotation = Quaternion.Euler(0f, position.x * 37f + position.z * 11f, 0f);
             return coin;
@@ -50,6 +53,13 @@ namespace MayaAdventure
             return spin;
         }
 
+        void Start()
+        {
+            // Already picked up earlier in this session: stays gone.
+            key = GameManager.KeyFor(Red ? "red" : Value > 1 ? "blue" : "coin", home);
+            if (GameManager.I != null && GameManager.I.Taken(key)) Destroy(gameObject);
+        }
+
         void Update()
         {
             spinner.Rotate(0f, 200f * Time.deltaTime, 0f, Space.Self);
@@ -58,6 +68,7 @@ namespace MayaAdventure
             Vector3 d = gm.Player.transform.position + Vector3.up * 0.85f - transform.position;
             if (d.sqrMagnitude < 1.1f)
             {
+                gm.Take(key);
                 if (Value > 1) gm.CollectCoins(Value, transform.position);
                 else gm.CollectCoin(Red, transform.position);
                 Debris.Burst(transform.position, Red ? new Color(1f, 0.3f, 0.3f) : new Color(1f, 0.85f, 0.3f), 8, 3f);

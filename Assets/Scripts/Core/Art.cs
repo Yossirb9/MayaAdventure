@@ -35,6 +35,7 @@ namespace MayaAdventure
             standard = null;
             starMesh = null;
             coneMesh = null;
+            lathes.Clear();
         }
 
         // ---------- materials ----------
@@ -217,6 +218,58 @@ namespace MayaAdventure
             coneMesh.RecalculateNormals();
             coneMesh.RecalculateBounds();
             return coneMesh;
+        }
+
+        static readonly Dictionary<string, Mesh> lathes = new Dictionary<string, Mesh>();
+
+        /// <summary>
+        /// Smooth surface of revolution around Y: <paramref name="profile"/> is (radius, height) from bottom to top.
+        /// Cached under <paramref name="key"/>.
+        /// </summary>
+        public static Mesh LatheMesh(string key, Vector2[] profile, int seg = 32)
+        {
+            if (lathes.TryGetValue(key, out var cached) && cached != null) return cached;
+            var verts = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var tris = new List<int>();
+            int rows = profile.Length;
+            for (int i = 0; i <= seg; i++)
+            {
+                float a = i * Mathf.PI * 2f / seg;
+                float c = Mathf.Cos(a), s = Mathf.Sin(a);
+                for (int j = 0; j < rows; j++)
+                {
+                    verts.Add(new Vector3(c * profile[j].x, profile[j].y, s * profile[j].x));
+                    uvs.Add(new Vector2(i / (float)seg, j / (float)(rows - 1)));
+                }
+            }
+            for (int i = 0; i < seg; i++)
+                for (int j = 0; j < rows - 1; j++)
+                {
+                    int a = i * rows + j, b = (i + 1) * rows + j;
+                    tris.Add(a); tris.Add(a + 1); tris.Add(b);
+                    tris.Add(b); tris.Add(a + 1); tris.Add(b + 1);
+                }
+            var mesh = new Mesh { name = key };
+            mesh.SetVertices(verts);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            lathes[key] = mesh;
+            return mesh;
+        }
+
+        /// <summary>A smooth dome / cap profile: radius <paramref name="r"/>, height <paramref name="h"/>, a little rim underneath.</summary>
+        public static Vector2[] DomeProfile(float r, float h, float rim = 0.08f, int steps = 10)
+        {
+            var pts = new List<Vector2> { new Vector2(0f, 0f), new Vector2(r * 0.85f, 0f), new Vector2(r, rim * 0.5f) };
+            for (int i = 0; i <= steps; i++)
+            {
+                float t = i / (float)steps * Mathf.PI * 0.5f;
+                pts.Add(new Vector2(Mathf.Cos(t) * r, rim + Mathf.Sin(t) * h));
+            }
+            return pts.ToArray();
         }
 
         static void AddTri(List<Vector3> v, List<int> t, Vector3 a, Vector3 b, Vector3 c)

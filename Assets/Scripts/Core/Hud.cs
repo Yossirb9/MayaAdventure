@@ -59,6 +59,50 @@ namespace MayaAdventure
         }
 
         /// <summary>Small hint at the bottom; call every frame while it should stay visible.</summary>
+        string speechWho, speechText, missionText;
+        float speechUntil, missionUntil;
+
+        /// <summary>A character talking to Maya (call every frame while it talks).</summary>
+        public void Speech(string who, string text)
+        {
+            speechWho = who;
+            speechText = text;
+            speechUntil = Time.unscaledTime + 0.15f;
+        }
+
+        /// <summary>Announces the world's next star ("mission") in a banner for a few seconds.</summary>
+        public void Mission(string title, float seconds)
+        {
+            missionText = title;
+            missionUntil = Time.unscaledTime + seconds;
+        }
+
+        void DrawSpeech(float w, float h)
+        {
+            if (speechText == null || Time.unscaledTime > speechUntil || ScriptedInput.Active) return;
+            const float boxWidth = 1180f, lineHeight = 50f;
+            var lines = Wrap(speechText, 38, boxWidth - 80f);
+            float boxHeight = 84f + lines.Count * lineHeight;
+            float top = h - 120f - boxHeight;
+            float left = w * 0.5f - boxWidth * 0.5f;
+            Panel(new Rect(left, top, boxWidth, boxHeight), 0.96f);
+            Text(new Rect(left + 30f, top + 10f, boxWidth - 60f, 52f), speechWho, 36, new Color(1f, 0.85f, 0.35f), TextAnchor.MiddleRight, 3);
+            for (int i = 0; i < lines.Count; i++)
+                Text(new Rect(left, top + 64f + i * lineHeight, boxWidth, lineHeight), lines[i], 38, Color.white, TextAnchor.MiddleCenter, 2);
+        }
+
+        void DrawMission(float w)
+        {
+            if (missionText == null || Time.unscaledTime > missionUntil || ScriptedInput.Active) return;
+            float a = Mathf.Clamp01((missionUntil - Time.unscaledTime) * 2f) * Mathf.Clamp01((Time.unscaledTime - (missionUntil - 6f)) * 3f);
+            // Under the world's name while that is still showing.
+            bool nameShowing = title != null && Time.unscaledTime < titleUntil;
+            var r = new Rect(w * 0.5f - 520f, nameShowing ? 305f : 170f, 1040f, 120f);
+            PanelTinted(r, new Color(1f, 1f, 1f, 0.95f * a));
+            Text(new Rect(r.x, r.y + 8f, r.width, 46f), "המשימה הבאה", 32, new Color(1f, 0.85f, 0.35f, a), TextAnchor.MiddleCenter, 2);
+            Text(new Rect(r.x, r.y + 52f, r.width, 60f), missionText, 46, new Color(1f, 1f, 1f, a), TextAnchor.MiddleCenter, 3);
+        }
+
         public void Hint(string text)
         {
             hint = text;
@@ -480,14 +524,19 @@ namespace MayaAdventure
                     DrawStatus(gm, w);
                     DrawBanner(w);
                     DrawMessage(w, h);
+                    DrawMission(w);
                     DrawHint(w, h);
+                    DrawSpeech(w, h);
                     DrawHints(w, h);
                     break;
                 case GameState.Paused:
                     DrawStatus(gm, w);
                     Fill(new Rect(0, 0, w, h), new Color(0f, 0f, 0.05f, 0.5f));
-                    Text(new Rect(0, 150, w, 120), page == Page.Settings ? "הגדרות" : "הפסקה", 88, new Color(1f, 0.86f, 0.28f), TextAnchor.MiddleCenter, 4);
-                    Text(new Rect(0, 270, w, 60), $"{gm.LevelName}: {gm.LevelStars}/{gm.LevelStarTotal} כוכבים", 38, Color.white, TextAnchor.MiddleCenter, 2);
+                    Text(new Rect(0, 150, w, 120), page == Page.Settings ? "הגדרות" : page == Page.Shop ? "בגדים למאיה" : page == Page.Missions ? "משימות" : "הפסקה",
+                         88, new Color(1f, 0.86f, 0.28f), TextAnchor.MiddleCenter, 4);
+                    if (page == Page.Shop) Text(new Rect(0, 270, w, 60), $"יש לך {Outfits.Wallet} מטבעות", 38, new Color(1f, 0.92f, 0.6f), TextAnchor.MiddleCenter, 2);
+                    else if (page == Page.Missions) DrawMissionList(gm, w);
+                    else Text(new Rect(0, 270, w, 60), $"{gm.LevelName}: {gm.LevelStars}/{gm.LevelStarTotal} כוכבים", 38, Color.white, TextAnchor.MiddleCenter, 2);
                     DrawButtons();
                     break;
                 case GameState.Won:
@@ -553,6 +602,10 @@ namespace MayaAdventure
                 for (int i = 0; i < lines.Length; i++)
                     Text(new Rect(w * 0.5f - 660f, 370 + i * 56, 1320f, 54f), lines[i], 31, new Color(0.92f, 0.96f, 1f), TextAnchor.MiddleCenter, 2);
             }
+            else if (page == Page.Shop)
+            {
+                Text(new Rect(cx - 500f, 300f, 1000f, 60f), $"בגדים למאיה · יש לך {Outfits.Wallet} מטבעות", 38, new Color(1f, 0.92f, 0.6f), TextAnchor.MiddleCenter, 3);
+            }
             else if (page == Page.ConfirmNew)
             {
                 Text(new Rect(cx - 500f, 360f, 1000f, 70f), "להתחיל משחק חדש? כל הכוכבים שאספת יימחקו", 40, new Color(1f, 0.8f, 0.8f), TextAnchor.MiddleCenter, 3);
@@ -563,7 +616,22 @@ namespace MayaAdventure
 
         // ---------- title and pause menus ----------
 
-        enum Page { Main, Settings, Help, ConfirmNew }
+        enum Page { Main, Settings, Help, ConfirmNew, Shop, Missions }
+
+        /// <summary>Pause menu: the world's stars with a tick for each one already collected.</summary>
+        void DrawMissionList(GameManager gm, float w)
+        {
+            var stars = gm.LevelStarsList();
+            float y = 260f;
+            foreach (var s in stars)
+            {
+                bool got = gm.HasStar(s.Id);
+                bool current = gm.Mission == s;
+                var col = got ? new Color(0.7f, 0.95f, 0.7f) : current ? new Color(1f, 0.85f, 0.35f) : Color.white;
+                Text(new Rect(w * 0.5f - 500f, y, 1000f, 56f), got ? s.Title + " - נאסף" : current ? "המשימה: " + s.Title : s.Title, 40, col, TextAnchor.MiddleCenter, 2);
+                y += 60f;
+            }
+        }
 
         struct MenuButton
         {
@@ -602,7 +670,9 @@ namespace MayaAdventure
             buttons.Clear();
             bool title = gm.State == GameState.Title;
             float bw = title ? 620f : 660f, bh = title ? 88f : 90f, gap = 20f;
-            float y = page == Page.Help ? 800f : page == Page.ConfirmNew ? 450f : title ? 372f : 380f;
+            float y = page == Page.Help ? 800f : page == Page.ConfirmNew ? 450f : page == Page.Missions ? 600f : page == Page.Shop ? (title ? 380f : 350f) : title ? 372f : 380f;
+            if (page == Page.Shop) { bh = 76f; gap = 14f; }
+            if (page == Page.Settings) { bh = 68f; gap = 10f; y -= 20f; }
             float cx = title && page != Page.Help ? TitleColumn(w) : w * 0.5f;
             void Add(string label, System.Action action, Texture2D icon = null, bool primary = false)
             {
@@ -615,11 +685,14 @@ namespace MayaAdventure
                 case Page.Main when title:
                     if (gm.HasProgress) Add($"המשך מהפעם הקודמת  ({gm.Stars}/{gm.TotalStars})", gm.ContinueGame, starIcon, true);
                     Add("משחק חדש", () => { if (gm.HasProgress) Go(Page.ConfirmNew); else gm.StartNewGame(); }, playIcon, !gm.HasProgress);
+                    Add("בגדים למאיה", () => Go(Page.Shop), starIcon);
                     Add("איך משחקים", () => Go(Page.Help), padIcon);
                     Add("הגדרות", () => Go(Page.Settings), gearIcon);
                     break;
                 case Page.Main:
                     Add("המשך לשחק", gm.Resume);
+                    Add("משימות בעולם הזה", () => Go(Page.Missions));
+                    Add("בגדים למאיה", () => Go(Page.Shop));
                     Add("חזרה לנקודת הביקורת", gm.RespawnFromMenu);
                     Add("הגדרות", () => Go(Page.Settings));
                     Add("לתפריט הראשי", gm.QuitToTitle);
@@ -629,9 +702,31 @@ namespace MayaAdventure
                     Add($"מוזיקה: {(GameSettings.Music ? "פועלת" : "כבויה")}", () => { GameSettings.Music = !GameSettings.Music; SettingChanged(); });
                     Add($"גרפיקה: {GameSettings.QualityNames[GameSettings.Quality]}", () => { GameSettings.Quality = (GameSettings.Quality + 1) % 3; SettingChanged(); });
                     Add($"מצלמה: {GameSettings.ZoomNames[GameSettings.CameraZoom]}", () => { GameSettings.CameraZoom = (GameSettings.CameraZoom + 1) % 3; SettingChanged(); });
+                    Add($"כפתורי מגע: {GameSettings.ButtonSizeNames[GameSettings.ButtonSize]}", () => { GameSettings.ButtonSize = (GameSettings.ButtonSize + 1) % 3; SettingChanged(); });
+                    Add($"צד הכפתורים: {(GameSettings.LeftHanded ? "שמאל" : "ימין")}", () => { GameSettings.LeftHanded = !GameSettings.LeftHanded; SettingChanged(); });
+                    Add($"רטט: {(GameSettings.Vibration ? "פועל" : "כבוי")}", () => { GameSettings.Vibration = !GameSettings.Vibration; SettingChanged(); Haptics.Pulse(40); });
                     Add("חזרה", () => Go(Page.Main));
                     break;
                 case Page.Help:
+                case Page.Missions:
+                    Add("חזרה", () => Go(Page.Main));
+                    break;
+                case Page.Shop:
+                    foreach (var item in Outfits.Items)
+                    {
+                        var it = item;
+                        string label = !Outfits.Owns(it.Id) ? $"{it.Name} · {it.Price} מטבעות"
+                                     : Outfits.Wears(it.Id) ? $"{it.Name} · לבושה עכשיו" : $"{it.Name} · ללבוש";
+                        Add(label, () =>
+                        {
+                            if (!Outfits.Owns(it.Id))
+                            {
+                                if (Outfits.Buy(it.Id)) { gm.Sfx.Play(gm.Sfx.Star, 0.6f); Show($"קנית {it.Name}!", 2f); }
+                                else Show($"חסרים עוד {it.Price - Outfits.Wallet} מטבעות", 2f);
+                            }
+                            else Outfits.Wear(it.Id, !Outfits.Wears(it.Id));
+                        });
+                    }
                     Add("חזרה", () => Go(Page.Main));
                     break;
                 case Page.ConfirmNew:
@@ -796,19 +891,19 @@ namespace MayaAdventure
             Text(new Rect(165f, 40f, 700f, 44f), gm.LevelName, 36, Color.white, TextAnchor.MiddleLeft, 3);
             Text(new Rect(165f, 86f, 700f, 40f), $"כוכבים בעולם הזה: {gm.LevelStars}/{gm.LevelStarTotal}", 28, new Color(1f, 0.9f, 0.5f), TextAnchor.MiddleLeft, 2);
 
-            // Boss health bar, top centre, while fighting a king.
-            var king = KingGrumble.Engaged;
-            if (king != null && !king.Dead)
+            // Boss health bar, top centre, while fighting a boss.
+            var boss = Enemy.Boss;
+            if (boss != null && !boss.Dead && boss.BossMaxHp > 0)
             {
                 float bw = 560f, bx = w * 0.5f - bw * 0.5f;
                 Panel(new Rect(bx, 16f, bw, 96f));
-                Text(new Rect(bx, 20f, bw, 44f), "המלך גרמבל", 34, new Color(1f, 0.75f, 0.3f), TextAnchor.MiddleCenter, 3);
-                float slot = (bw - 60f) / Mathf.Max(1, king.MaxHp);
-                for (int i = 0; i < king.MaxHp; i++)
+                Text(new Rect(bx, 20f, bw, 44f), boss.BossName, 34, new Color(1f, 0.75f, 0.3f), TextAnchor.MiddleCenter, 3);
+                float slot = (bw - 60f) / boss.BossMaxHp;
+                for (int i = 0; i < boss.BossMaxHp; i++)
                 {
                     var r = new Rect(bx + 30f + i * slot + 4f, 70f, slot - 8f, 24f);
                     Fill(r, new Color(0.1f, 0.05f, 0.1f, 0.7f));
-                    if (i < king.Hp) Fill(new Rect(r.x + 3f, r.y + 3f, r.width - 6f, r.height - 6f), new Color(0.95f, 0.25f, 0.35f));
+                    if (i < boss.BossHp) Fill(new Rect(r.x + 3f, r.y + 3f, r.width - 6f, r.height - 6f), new Color(0.95f, 0.25f, 0.35f));
                 }
             }
 

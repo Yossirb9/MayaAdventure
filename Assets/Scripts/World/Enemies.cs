@@ -660,6 +660,10 @@ namespace MayaAdventure
         public static KingGrumble Engaged { get; private set; }
         public int Hp => hp;
         public int MaxHp => maxHp;
+        public override string BossName => "המלך גרמבל";
+        public override int BossHp => hp;
+        public override int BossMaxHp => maxHp;
+        bool enraged;
         /// <summary>The shockwave ring's radius, or -1 when there is none.</summary>
         public float WaveRadius => wave < 0f ? -1f : wave * 9f;
         public Vector3 WaveCenter => waveCenter;
@@ -711,11 +715,27 @@ namespace MayaAdventure
             crown.SetParent(body, false);
             crown.localPosition = new Vector3(0f, 1.18f, 0f);
             var gold = Art.Glow(new Color(1f, 0.8f, 0.2f), 0.5f, 0.9f, 1f);
-            Art.Prim(PrimitiveType.Cylinder, "Band", crown, Vector3.zero, new Vector3(0.55f, 0.08f, 0.55f), gold, Art.Col.None);
+            var pearl = Art.Glow(new Color(1f, 0.97f, 0.9f), 0.4f, 0.9f, 0f);
+            Art.MeshObject("Band", Art.LatheMesh("CrownBand", new[]
+            {
+                new Vector2(0.24f, -0.04f), new Vector2(0.27f, -0.04f), new Vector2(0.28f, 0f), new Vector2(0.29f, 0.08f),
+                new Vector2(0.31f, 0.13f), new Vector2(0.27f, 0.13f), new Vector2(0.25f, 0.02f),
+            }), crown, Vector3.zero, Vector3.one, gold);
+            string[] gems = { "Platformer/Gem_Pink", "Platformer/Gem_Blue", "Platformer/Gem_Green" };
             for (int i = 0; i < 5; i++)
             {
                 var r = Quaternion.Euler(0f, i * 72f, 0f);
-                Art.MeshObject("Point", Art.ConeMesh(), crown, r * new Vector3(0f, 0.08f, 0.24f), new Vector3(0.12f, 0.22f, 0.12f), gold);
+                Art.MeshObject("Point", Art.ConeMesh(), crown, r * new Vector3(0f, 0.12f, 0.27f), new Vector3(0.13f, 0.26f, 0.13f), gold);
+                Art.Prim(PrimitiveType.Sphere, "Pearl", crown, r * new Vector3(0f, 0.4f, 0.27f), Vector3.one * 0.07f, pearl, Art.Col.None);
+                var gemPrefab = Nature.Load(gems[i % gems.Length]);
+                if (gemPrefab != null)
+                {
+                    var gem = Instantiate(gemPrefab, crown, false).transform;
+                    gem.localPosition = Quaternion.Euler(0f, i * 72f + 36f, 0f) * new Vector3(0f, 0.05f, 0.29f);
+                    gem.localRotation = Quaternion.Euler(0f, i * 72f + 36f, 90f);
+                    gem.localScale = Vector3.one * 0.09f;
+                    foreach (var col in gem.GetComponentsInChildren<Collider>()) Destroy(col);
+                }
             }
         }
 
@@ -750,6 +770,18 @@ namespace MayaAdventure
                 gm.Sfx.Play(gm.Sfx.Stomp);
                 Debris.Burst(Center + Vector3.up, new Color(1f, 0.85f, 0.3f), 14, 5f);
             }
+            if (hp == 1 && !enraged)
+            {
+                // Second stage: he turns red with fury, runs faster, slams twice in a row and calls for help.
+                enraged = true;
+                chaseSpeed += 1.2f;
+                Props.Tint(body.gameObject, new Color(1.45f, 0.65f, 0.6f));
+                for (int i = 0; i < 2; i++)
+                    Grumble.Build(transform.parent, transform.localPosition + Quaternion.Euler(0f, i * 180f + 90f, 0f) * Vector3.forward * 4f);
+                gm?.Hud.Show("המלך זועם! עוד פעם אחת!", 2f);
+                ThirdPersonCamera.Shake(0.3f);
+                return true;
+            }
             if (hp > 0)
             {
                 gm?.Hud.Show(hp == 1 ? "עוד פעם אחת!" : $"המלך כועס! עוד {hp}", 1.5f);
@@ -764,6 +796,8 @@ namespace MayaAdventure
             bool near = !Dead && EnemyArt.PlayerNear(transform.position, 20f, out _);
             if (near) Engaged = this;
             else if (Engaged == this) Engaged = null;
+            if (near) Boss = this;
+            else if (Boss == this) Boss = null;
             if (Dead) return;
             float dt = Time.deltaTime;
             if (invulnerable > 0f)
@@ -785,9 +819,9 @@ namespace MayaAdventure
             base.Update();
         }
 
-        IEnumerator JumpSlam()
+        IEnumerator JumpSlam(bool followUp = false)
         {
-            waveTimer = 3.2f + Random.value * 1.6f; // more aggressive than before
+            waveTimer = enraged ? 2.4f + Random.value : 3.2f + Random.value * 1.6f;
             dazed = 1.1f;
             var start = body.localPosition;
             for (float t = 0f; t < 0.9f; t += Time.deltaTime)
@@ -799,11 +833,19 @@ namespace MayaAdventure
             body.localPosition = start;
             var gm = GameManager.I;
             if (gm != null) gm.Sfx.Play(gm.Sfx.Boom, 0.8f);
+            if (gm != null && gm.Player != null && (gm.Player.transform.position - transform.position).sqrMagnitude < 18f * 18f)
+                ThirdPersonCamera.Shake(0.3f);
             Debris.Burst(transform.position, new Color(0.75f, 0.65f, 0.45f), 18, 6f);
             wave = 0f;
             waveCenter = transform.position;
             ring.position = waveCenter + Vector3.up * 0.05f;
             ring.gameObject.SetActive(true);
+            if (enraged && !followUp)
+            {
+                // Furious: a second slam right after the first ring has passed.
+                yield return new WaitForSeconds(1.35f);
+                if (!Dead && wave < 0f) StartCoroutine(JumpSlam(true));
+            }
         }
 
         void UpdateWave(float dt)
@@ -861,10 +903,14 @@ namespace MayaAdventure
         protected override void OnDefeated()
         {
             if (ring != null) Destroy(ring.gameObject);
+            if (Boss == this) Boss = null;
             var gm = GameManager.I;
             if (star != null) star.Reveal();
+            ThirdPersonCamera.Shake(0.35f);
             if (gm != null)
             {
+                gm.SlowMotion(0.3f, 1.1f);
+                gm.Sfx.Say(gm.Sfx.SayYay);
                 gm.Sfx.Play(gm.Sfx.Reveal);
                 gm.Hud.Show("ניצחת את המלך! כוכב הופיע", 3f);
             }

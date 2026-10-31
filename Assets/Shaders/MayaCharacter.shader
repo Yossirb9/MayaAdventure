@@ -10,6 +10,12 @@ Shader "Maya/Character"
         [Normal] normalTexture ("Normal Map", 2D) = "bump" {}
         normalTexture_scale ("Normal Scale", Float) = 1
         metallicFactor ("Metal", Range(0, 1)) = 0
+        _FaceTex ("Face Expressions", 2D) = "white" {}
+        _FaceRect ("Face Rect (uv min, max)", Vector) = (0, 0, 0, 0)
+        _FaceRect2 ("Eye Corner Rect", Vector) = (0, 0, 0, 0)
+        _FaceLayout ("Atlas: split, rect2 height, tiles", Vector) = (1, 1, 1, 0)
+        _FaceIndex ("Expression", Float) = 0
+        _JacketTint ("Jacket Colour (a = on)", Color) = (0, 0, 0, 0)
         _Wrap ("Light Wrap", Range(0, 1)) = 0.55
         _ShadowSoftness ("Shadow Softness", Range(0, 1)) = 0.5
         _Fill ("Camera Fill", Range(0, 1)) = 0.32
@@ -25,10 +31,14 @@ Shader "Maya/Character"
         CBUFFER_START(UnityPerMaterial)
             float4 baseColorTexture_ST;
             half4 baseColorFactor;
+            float4 _FaceRect, _FaceRect2, _FaceLayout;
+            float _FaceIndex;
+            half4 _JacketTint;
             half normalTexture_scale, metallicFactor, _Wrap, _ShadowSoftness, _Fill, _Rim, _Saturation;
         CBUFFER_END
         TEXTURE2D(baseColorTexture); SAMPLER(sampler_baseColorTexture);
         TEXTURE2D(normalTexture); SAMPLER(sampler_normalTexture);
+        TEXTURE2D(_FaceTex); SAMPLER(sampler_FaceTex);
         ENDHLSL
 
         Pass
@@ -72,7 +82,31 @@ Shader "Maya/Character"
             half4 frag (Varyings i) : SV_Target
             {
                 // Negative mip bias keeps her eyes and face crisp at game distance.
-                half3 albedo = SAMPLE_TEXTURE2D_BIAS(baseColorTexture, sampler_baseColorTexture, i.uv, -0.8).rgb * baseColorFactor.rgb;
+                half3 albedo = SAMPLE_TEXTURE2D_BIAS(baseColorTexture, sampler_baseColorTexture, i.uv, -0.8).rgb;
+                if (_FaceIndex > 0.5)
+                {
+                    // Expressions: the face parts of the texture come from a tile of the expression atlas instead.
+                    // Each tile = the face rect on the left, the small eye-corner rect top-right.
+                    float2 l1 = (i.uv - _FaceRect.xy) / (_FaceRect.zw - _FaceRect.xy);
+                    float2 l2 = (i.uv - _FaceRect2.xy) / (_FaceRect2.zw - _FaceRect2.xy);
+                    bool in1 = all(l1 >= 0) && all(l1 <= 1);
+                    bool in2 = all(l2 >= 0) && all(l2 <= 1);
+                    float2 t = in1 ? float2(l1.x * _FaceLayout.x, l1.y)
+                                   : float2(_FaceLayout.x + l2.x * (1 - _FaceLayout.x), 1 - _FaceLayout.y + l2.y * _FaceLayout.y);
+                    t.y = (t.y + (_FaceLayout.z - 1 - _FaceIndex)) / _FaceLayout.z;
+                    half3 face = SAMPLE_TEXTURE2D_GRAD(_FaceTex, sampler_FaceTex, t, ddx(i.uv) * 2, ddy(i.uv) * 2).rgb;
+                    albedo = (in1 || in2) ? face : albedo;
+                }
+                if (_JacketTint.a > 0.01)
+                {
+                    // Recolour the pink clothes (jacket, sneakers, shirt hearts) but never the face.
+                    float2 f1 = (i.uv - _FaceRect.xy) / (_FaceRect.zw - _FaceRect.xy);
+                    bool onFace = all(f1 >= 0) && all(f1 <= 1);
+                    half pink = saturate((albedo.r - albedo.g) * 5 - 0.5) * saturate((albedo.b - albedo.g + 0.04) * 10);
+                    half lum = dot(albedo, half3(0.299, 0.587, 0.114));
+                    albedo = lerp(albedo, _JacketTint.rgb * lum * 1.35, onFace ? 0 : pink * _JacketTint.a);
+                }
+                albedo *= baseColorFactor.rgb;
                 half grey = dot(albedo, half3(0.299, 0.587, 0.114));
                 albedo = lerp(grey.xxx, albedo, _Saturation);
 
