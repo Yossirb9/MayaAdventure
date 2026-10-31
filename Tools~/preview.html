@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Maya preview</title>
+<style>body{margin:0;background:#8cc8ff;font-family:sans-serif}#ui{position:fixed;top:8px;left:8px}button{font-size:16px;margin:2px}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head><body><div id="ui"></div>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+const r=new THREE.WebGLRenderer({antialias:true});r.setSize(innerWidth,innerHeight);document.body.appendChild(r.domElement);
+const s=new THREE.Scene();s.background=new THREE.Color(0x8cc8ff);
+const c=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,.1,100);c.position.set(0,1.2,4);
+new OrbitControls(c,r.domElement).target.set(0,.9,0);
+s.add(new THREE.HemisphereLight(0xffffff,0x446622,2));const d=new THREE.DirectionalLight(0xffffff,2);d.position.set(2,4,3);s.add(d);
+s.add(new THREE.GridHelper(4,8));
+let mixer;const clock=new THREE.Clock();
+new GLTFLoader().load('../Assets/StreamingAssets/Maya.glb?'+Date.now(),g=>{s.add(g.scene);window.g=g;window.THREE=THREE;window.cam=c;window.getMixer=()=>mixer;window.freeze=()=>{mixer=null};mixer=new THREE.AnimationMixer(g.scene);
+ let cur;for(const a of g.animations){const b=document.createElement('button');b.textContent=a.name;b.onclick=()=>{cur&&cur.stop();cur=mixer.clipAction(a);cur.play()};ui.appendChild(b)}
+ window.play=n=>[...ui.children].find(b=>b.textContent==n).click();play('Walk');window.ready=true;});
+(function loop(){requestAnimationFrame(loop);if(r.domElement.width!==innerWidth*devicePixelRatio||r.domElement.height!==innerHeight*devicePixelRatio){r.setPixelRatio(devicePixelRatio);r.setSize(innerWidth,innerHeight);c.aspect=innerWidth/innerHeight;c.updateProjectionMatrix();}mixer&&mixer.update(clock.getDelta());r.render(s,c)})();
+</script></body></html>
